@@ -1,0 +1,6 @@
+{
+  "name": "Anotador Domino",
+  "description": "Anotador de puntos para partidas de Dominó por rondas o acumulación total con interfaz intuitiva e historial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Domino Tile Background (White rounded tile, tilted slightly for dynamic look) -->
+    <!-- Tile 1: 34 wide, 56 high, centered around 54, 54 -->
+    <!-- Outer tile shadow -->
+    <path
+        android:fillColor="#33000000"
+        android:pathData="M39,26 L69,26 A6,6 0 0,1 75,32 L75,82 A6,6 0 0,1 69,88 L39,88 A6,6 0 0,1 33,82 L33,32 A6,6 0 0,1 39,26 Z" />
+    <!-- Domino Tile Body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,24 L68,24 A6,6 0 0,1 74,30 L74,80 A6,6 0 0,1 68,86 L38,86 A6,6 0 0,1 32,30 L32,30 A6,6 0 0,1 38,24 Z" />
+    
+    <!-- Dividing Line with metallic bead accent -->
+    <path
+        android:pathData="M36,55 L70,55"
+        android:strokeColor="#CBD5E1"
+        android:strokeWidth="1.8" />
+    <!-- Center brass pivot pin -->
+    <path
+        android:pathData="M53,55m-2,0a2,2 0 1,0 4,0a2,2 0 1,0 -4,0"
+        android:fillColor="#F59E0B" />
+
+    <!-- Top Half: [4 pips] (Four dots) -->
+    <!-- Top-left pip -->
+    <path
+        android:pathData="M43,35m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#0F172A" />
+    <!-- Top-right pip -->
+    <path
+        android:pathData="M63,35m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#0F172A" />
+    <!-- Bottom-left pip top-half -->
+    <path
+        android:pathData="M43,45m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#0F172A" />
+    <!-- Bottom-right pip top-half -->
+    <path
+        android:pathData="M63,45m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#0F172A" />
+
+    <!-- Bottom Half: [5 pips] (Five dots: 4 corners + 1 center) -->
+    <path
+        android:pathData="M43,65m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#EF4444" />
+    <path
+        android:pathData="M63,65m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#EF4444" />
+    <path
+        android:pathData="M53,70.5m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#EF4444" />
+    <path
+        android:pathData="M43,76m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#EF4444" />
+    <path
+        android:pathData="M63,76m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#EF4444" />
+</vector>
