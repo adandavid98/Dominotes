@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -205,15 +206,85 @@ fun ScoreCard(
 
             // Direct Accumulation Quick Buttons (Shown when quick controls active)
             if (showQuickControls) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+                // Row 1: +5, +10, +25
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    QuickButton(label = "+5", onClick = { onQuickAdd(5) }, color = themeColor)
-                    QuickButton(label = "+10", onClick = { onQuickAdd(10) }, color = themeColor)
-                    QuickButton(label = "+25", onClick = { onQuickAdd(25) }, color = themeColor)
-                    QuickSubtractButton(onClick = { onQuickAdd(-5) })
+                    QuickButton(
+                        label = "+5",
+                        onClick = { onQuickAdd(5) },
+                        color = themeColor,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("quick_add_5_$playerIndex")
+                    )
+                    QuickButton(
+                        label = "+10",
+                        onClick = { onQuickAdd(10) },
+                        color = themeColor,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("quick_add_10_$playerIndex")
+                    )
+                    QuickButton(
+                        label = "+25",
+                        onClick = { onQuickAdd(25) },
+                        color = themeColor,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("quick_add_25_$playerIndex")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Row 2: +30, +35, +40
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    QuickButton(
+                        label = "+30",
+                        onClick = { onQuickAdd(30) },
+                        color = themeColor,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("quick_add_30_$playerIndex")
+                    )
+                    QuickButton(
+                        label = "+35",
+                        onClick = { onQuickAdd(35) },
+                        color = themeColor,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("quick_add_35_$playerIndex")
+                    )
+                    QuickButton(
+                        label = "+40",
+                        onClick = { onQuickAdd(40) },
+                        color = themeColor,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("quick_add_40_$playerIndex")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Row 3: Subtract / Correction
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    QuickSubtractButton(
+                        label = "-5 puntos",
+                        onClick = { onQuickAdd(-5) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("quick_sub_5_$playerIndex")
+                    )
                 }
             }
         }
@@ -229,20 +300,24 @@ private fun QuickButton(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(8.dp),
-        color = color.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f)),
-        modifier = modifier.height(34.dp)
+        shape = RoundedCornerShape(10.dp),
+        color = color.copy(alpha = 0.15f),
+        border = BorderStroke(1.5.dp, color.copy(alpha = 0.45f)),
+        modifier = modifier.height(46.dp)
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 2.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = label,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = color,
+                maxLines = 1,
+                softWrap = false
             )
         }
     }
@@ -250,25 +325,38 @@ private fun QuickButton(
 
 @Composable
 private fun QuickSubtractButton(
+    label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = modifier.height(34.dp)
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+        modifier = modifier.height(38.dp)
     ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 6.dp),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Remove,
                 contentDescription = "Restar 5 puntos",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
             )
         }
     }

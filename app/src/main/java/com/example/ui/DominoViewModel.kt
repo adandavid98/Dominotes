@@ -3,6 +3,14 @@ package com.example.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.auth.AuthRepository
+import com.example.data.auth.AuthUser
+import com.example.data.domino.DominoEngine
+import com.example.data.domino.DominoGamePlayMode
+import com.example.data.domino.DominoTableState
+import com.example.data.domino.DominoTile
+import com.example.data.domino.TableGameStatus
+import com.example.data.domino.TilePlacement
 import com.example.data.local.DominoDatabase
 import com.example.data.local.MatchEntity
 import com.example.data.local.RoundEntity
@@ -10,6 +18,7 @@ import com.example.data.model.BonusTag
 import com.example.data.model.GameMode
 import com.example.data.model.ScoringDisplayMode
 import com.example.data.repository.DominoRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +26,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+enum class MainAppTab {
+    SCORER,
+    PLAY_DOMINO
+}
 
 data class ActiveGameState(
     val matchId: Long = 0L,
@@ -34,14 +48,33 @@ data class ActiveGameState(
     val showTrancaCalculator: Boolean = false,
     val showNewGameDialog: Boolean = false,
     val showVictoryDialog: Boolean = false,
-    val showHistoryScreen: Boolean = false
+    val showHistoryScreen: Boolean = false,
+    val currentTab: MainAppTab = MainAppTab.SCORER,
+    val showAuthDialog: Boolean = false,
+    val showFriendsDialog: Boolean = false,
+    val inTableLobby: Boolean = true
 )
 
 class DominoViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: DominoRepository
+    val authRepository = AuthRepository(application)
+    val currentUser: StateFlow<AuthUser?> = authRepository.currentUser
 
     private val _gameState = MutableStateFlow(ActiveGameState())
     val gameState: StateFlow<ActiveGameState> = _gameState.asStateFlow()
+
+    // Interactive Domino Game Table State
+    private val _tableState = MutableStateFlow(
+        DominoEngine.startNewMatch(
+            humanPlayerName = authRepository.currentUser.value?.displayName ?: "Jugador",
+            botCount = 3,
+            targetScore = 100
+        )
+    )
+    val tableState: StateFlow<DominoTableState> = _tableState.asStateFlow()
+
+    private val _selectedTile = MutableStateFlow<DominoTile?>(null)
+    val selectedTile: StateFlow<DominoTile?> = _selectedTile.asStateFlow()
 
     val matchHistory: StateFlow<List<MatchEntity>>
 
@@ -386,5 +419,160 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
         }
+    }
+
+    // Navigation & Dialog Controls
+    fun setCurrentTab(tab: MainAppTab) {
+        _gameState.update { it.copy(currentTab = tab) }
+    }
+
+    fun setShowAuthDialog(show: Boolean) {
+        _gameState.update { it.copy(showAuthDialog = show) }
+    }
+
+    fun setShowFriendsDialog(show: Boolean) {
+        _gameState.update { it.copy(showFriendsDialog = show) }
+    }
+
+    // Google Auth actions
+    fun signInGoogle(email: String, displayName: String) {
+        val uid = "google_" + email.hashCode()
+        val user = AuthUser(uid = uid, email = email, displayName = displayName)
+        authRepository.signIn(user)
+        _gameState.update { it.copy(showAuthDialog = false) }
+
+        // Update human player name in domino game
+        startNewDominoTableGame(roomCode = _tableState.value.roomCode)
+    }
+
+    fun signOutGoogle() {
+        authRepository.signOut()
+        _gameState.update { it.copy(showAuthDialog = false) }
+        startNewDominoTableGame(roomCode = null)
+    }
+
+    fun updatePlayerDisplayName(newName: String) {
+        authRepository.updateDisplayName(newName)
+        startNewDominoTableGame(roomCode = _tableState.value.roomCode)
+    }
+
+    // Domino Table Game Actions
+    fun setSelectedTile(tile: DominoTile?) {
+        _selectedTile.value = tile
+    }
+
+    fun setInTableLobby(inLobby: Boolean) {
+        _gameState.update { it.copy(inTableLobby = inLobby) }
+    }
+
+    fun startNewDominoTableGame(
+        roomCode: String? = null,
+        botCount: Int = 3,
+        targetScore: Int = 100,
+        playMode: DominoGamePlayMode = if (botCount == 3) DominoGamePlayMode.PAREJAS_2V2 else DominoGamePlayMode.INDIVIDUAL
+    ) {
+        val humanName = authRepository.currentUser.value?.displayName ?: "Tú"
+        _tableState.value = DominoEngine.startNewMatch(
+            humanPlayerName = humanName,
+            botCount = botCount,
+            targetScore = targetScore,
+            roomCode = roomCode,
+            playMode = playMode
+        )
+        _selectedTile.value = null
+        _gameState.update { it.copy(inTableLobby = false) }
+        checkTriggerBotTurns()
+    }
+
+    fun playHumanTile(tile: DominoTile, placement: TilePlacement) {
+        val currentState = _tableState.value
+        if (currentState.currentTurnIndex != 0 || currentState.status != TableGameStatus.PLAYING) return
+
+        val newState = DominoEngine.playTile(currentState, 0, tile, placement)
+        _tableState.value = newState
+        _selectedTile.value = null
+
+        checkTriggerBotTurns()
+    }
+
+    fun drawHumanTile() {
+        val currentState = _tableState.value
+        if (currentState.currentTurnIndex != 0 || currentState.status != TableGameStatus.PLAYING) return
+
+        val newState = DominoEngine.drawFromBoneyard(currentState, 0)
+        _tableState.value = newState
+        checkTriggerBotTurns()
+    }
+
+    fun passHumanTurn() {
+        val currentState = _tableState.value
+        if (currentState.currentTurnIndex != 0 || currentState.status != TableGameStatus.PLAYING) return
+
+        val newState = DominoEngine.passTurn(currentState, 0)
+        _tableState.value = newState
+        _selectedTile.value = null
+        checkTriggerBotTurns()
+    }
+
+    fun nextTableRound() {
+        val current = _tableState.value
+        if (current.status == TableGameStatus.GAME_OVER) {
+            val botCount = (current.players.size - 1).coerceIn(1, 3)
+            startNewDominoTableGame(
+                roomCode = current.roomCode,
+                botCount = botCount,
+                targetScore = current.targetScore,
+                playMode = current.playMode
+            )
+        } else {
+            _tableState.value = DominoEngine.dealRound(
+                players = current.players,
+                targetScore = current.targetScore,
+                roomCode = current.roomCode,
+                playMode = current.playMode,
+                teamScores = current.teamScores
+            )
+            _selectedTile.value = null
+            checkTriggerBotTurns()
+        }
+    }
+
+    private fun checkTriggerBotTurns() {
+        viewModelScope.launch {
+            while (_tableState.value.status == TableGameStatus.PLAYING &&
+                _tableState.value.currentTurnIndex != 0
+            ) {
+                val botIdx = _tableState.value.currentTurnIndex
+                delay(900) // Realistic bot think delay
+
+                val decision = DominoEngine.computeBotMove(_tableState.value, botIdx)
+                when (decision) {
+                    is DominoEngine.BotDecision.Play -> {
+                        _tableState.value = DominoEngine.playTile(
+                            _tableState.value,
+                            botIdx,
+                            decision.tile,
+                            decision.placement
+                        )
+                    }
+                    is DominoEngine.BotDecision.Draw -> {
+                        _tableState.value = DominoEngine.drawFromBoneyard(_tableState.value, botIdx)
+                    }
+                    is DominoEngine.BotDecision.Pass -> {
+                        _tableState.value = DominoEngine.passTurn(_tableState.value, botIdx)
+                    }
+                }
+            }
+        }
+    }
+
+    fun createFriendsRoom(code: String, playerCount: Int = 4) {
+        val botCount = (playerCount - 1).coerceIn(1, 3)
+        startNewDominoTableGame(roomCode = code, botCount = botCount)
+    }
+
+    fun joinFriendsRoom(code: String) {
+        startNewDominoTableGame(roomCode = code)
+        _gameState.update { it.copy(showFriendsDialog = false) }
     }
 }

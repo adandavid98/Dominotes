@@ -25,14 +25,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Games
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.TableRestaurant
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -44,6 +50,9 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
@@ -66,11 +75,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.ScoringDisplayMode
 import com.example.ui.ActiveGameState
 import com.example.ui.DominoViewModel
+import com.example.ui.MainAppTab
 import com.example.ui.components.AddRoundDialog
+import com.example.ui.components.DominoTableView
 import com.example.ui.components.DominoTileView
+import com.example.ui.components.FriendsRoomDialog
+import com.example.ui.components.GoogleAccountDialog
 import com.example.ui.components.NewGameDialog
 import com.example.ui.components.RoundsTableView
 import com.example.ui.components.ScoreCard
@@ -86,6 +100,9 @@ fun DominoGameScreen(
     modifier: Modifier = Modifier
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val tableState by viewModel.tableState.collectAsStateWithLifecycle()
+    val selectedTile by viewModel.selectedTile.collectAsStateWithLifecycle()
 
     val highestScore = state.scores.maxOrNull() ?: 0
 
@@ -99,11 +116,16 @@ fun DominoGameScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = state.title,
+                                text = if (state.currentTab == MainAppTab.SCORER) state.title else "Mesa de Dominó",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = "Meta: ${state.targetScore} pts • ${state.gameMode.displayName}",
+                                text = if (state.currentTab == MainAppTab.SCORER)
+                                    "Meta: ${state.targetScore} pts • ${state.gameMode.displayName}"
+                                else if (tableState.roomCode != null)
+                                    "Sala Online: #${tableState.roomCode} • Meta ${tableState.targetScore} pts"
+                                else
+                                    "Partida vs Bots IA • Meta ${tableState.targetScore} pts",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -113,76 +135,152 @@ fun DominoGameScreen(
                     }
                 },
                 actions = {
-                    // Undo last action button
+                    // Google Account Button
                     IconButton(
-                        onClick = { viewModel.undoLastRound() },
-                        enabled = state.rounds.isNotEmpty(),
-                        modifier = Modifier.testTag("btn_undo_action")
+                        onClick = { viewModel.setShowAuthDialog(true) },
+                        modifier = Modifier.testTag("btn_google_account")
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Undo,
-                            contentDescription = "Deshacer última ronda",
-                            tint = if (state.rounds.isNotEmpty()) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        )
+                        if (currentUser != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = currentUser!!.displayName.take(1).uppercase(),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = "Cuenta Google"
+                            )
+                        }
                     }
 
-                    // Match History button
-                    IconButton(
-                        onClick = { viewModel.setShowHistoryScreen(true) },
-                        modifier = Modifier.testTag("btn_view_history")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = "Historial de partidas"
-                        )
-                    }
-
-                    // More Menu
-                    Box {
-                        IconButton(
-                            onClick = { showMenu = true },
-                            modifier = Modifier.testTag("btn_more_menu")
-                        ) {
-                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Opciones")
+                    if (state.currentTab == MainAppTab.PLAY_DOMINO) {
+                        if (!state.inTableLobby) {
+                            // Button to return to Lobby / Change Room
+                            IconButton(
+                                onClick = { viewModel.setInTableLobby(true) },
+                                modifier = Modifier.testTag("btn_table_lobby")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MeetingRoom,
+                                    contentDescription = "Lobby de Juego",
+                                    tint = DominoGold
+                                )
+                            }
                         }
 
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
+                        // Friends Room / Multiplayer button
+                        IconButton(
+                            onClick = { viewModel.setShowFriendsDialog(true) },
+                            modifier = Modifier.testTag("btn_friends_room")
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("Nueva Partida") },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.setShowNewGameDialog(true)
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.PostAdd, contentDescription = null)
-                                },
-                                modifier = Modifier.testTag("menu_new_game")
+                            Icon(
+                                imageVector = Icons.Default.Groups,
+                                contentDescription = "Jugar con Amigos",
+                                tint = DominoGold
                             )
-                            DropdownMenuItem(
-                                text = { Text("Reiniciar Marcador") },
+                        }
+
+                        // Restart table game (only when active table is showing)
+                        if (!state.inTableLobby) {
+                            IconButton(
                                 onClick = {
-                                    showMenu = false
-                                    viewModel.resetGame()
+                                    val botCount = (tableState.players.size - 1).coerceIn(1, 3)
+                                    viewModel.startNewDominoTableGame(
+                                        roomCode = tableState.roomCode,
+                                        botCount = botCount,
+                                        targetScore = tableState.targetScore
+                                    )
                                 },
-                                leadingIcon = {
-                                    Icon(Icons.Default.RestartAlt, contentDescription = null)
-                                },
-                                modifier = Modifier.testTag("menu_reset_game")
+                                modifier = Modifier.testTag("btn_restart_table")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.RestartAlt,
+                                    contentDescription = "Reiniciar Mesa"
+                                )
+                            }
+                        }
+                    } else {
+                        // Undo last round in Scorer
+                        IconButton(
+                            onClick = { viewModel.undoLastRound() },
+                            enabled = state.rounds.isNotEmpty(),
+                            modifier = Modifier.testTag("btn_undo_action")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Undo,
+                                contentDescription = "Deshacer última ronda",
+                                tint = if (state.rounds.isNotEmpty()) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             )
-                            DropdownMenuItem(
-                                text = { Text("Calculadora de Tranca") },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.setShowTrancaCalculator(true)
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Calculate, contentDescription = null)
-                                }
+                        }
+
+                        // Match History button
+                        IconButton(
+                            onClick = { viewModel.setShowHistoryScreen(true) },
+                            modifier = Modifier.testTag("btn_view_history")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = "Historial de partidas"
                             )
+                        }
+
+                        // More Menu for Scorer
+                        Box {
+                            IconButton(
+                                onClick = { showMenu = true },
+                                modifier = Modifier.testTag("btn_more_menu")
+                            ) {
+                                Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Opciones")
+                            }
+
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Nueva Partida") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.setShowNewGameDialog(true)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.PostAdd, contentDescription = null)
+                                    },
+                                    modifier = Modifier.testTag("menu_new_game")
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Reiniciar Marcador") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.resetGame()
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.RestartAlt, contentDescription = null)
+                                    },
+                                    modifier = Modifier.testTag("menu_reset_game")
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Calculadora de Tranca") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.setShowTrancaCalculator(true)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Calculate, contentDescription = null)
+                                    }
+                                )
+                            }
                         }
                     }
                 },
@@ -191,243 +289,245 @@ fun DominoGameScreen(
                 )
             )
         },
+        bottomBar = {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                NavigationBarItem(
+                    selected = state.currentTab == MainAppTab.SCORER,
+                    onClick = { viewModel.setCurrentTab(MainAppTab.SCORER) },
+                    icon = { Icon(Icons.Default.EditNote, contentDescription = null) },
+                    label = { Text("Anotador") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier.testTag("nav_scorer")
+                )
+                NavigationBarItem(
+                    selected = state.currentTab == MainAppTab.PLAY_DOMINO,
+                    onClick = { viewModel.setCurrentTab(MainAppTab.PLAY_DOMINO) },
+                    icon = { Icon(Icons.Default.TableRestaurant, contentDescription = null) },
+                    label = { Text("Juego de Mesa") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = DominoGold,
+                        selectedTextColor = DominoGold
+                    ),
+                    modifier = Modifier.testTag("nav_play_domino")
+                )
+            }
+        },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.setShowAddRoundDialog(true) },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Anotar Ronda", fontWeight = FontWeight.Bold) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier
-                    .testTag("btn_fab_add_round")
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-            )
+            if (state.currentTab == MainAppTab.SCORER) {
+                ExtendedFloatingActionButton(
+                    onClick = { viewModel.setShowAddRoundDialog(true) },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Anotar Ronda", fontWeight = FontWeight.Bold) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .testTag("btn_fab_add_round")
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                )
+            }
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            // Mode Switcher: "Por Rondas" vs "Acumulación Total"
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        if (state.currentTab == MainAppTab.PLAY_DOMINO) {
+            if (state.inTableLobby) {
+                // Table Mode Lobby: Select Bots vs Friends & Player count (2, 3, 4)
+                DominoLobbyScreen(
+                    currentDisplayName = currentUser?.displayName ?: "Tú",
+                    onStartBotGame = { totalPlayers, targetScore, playMode ->
+                        val botCount = (totalPlayers - 1).coerceIn(1, 3)
+                        viewModel.startNewDominoTableGame(
+                            roomCode = null,
+                            botCount = botCount,
+                            targetScore = targetScore,
+                            playMode = playMode
+                        )
+                    },
+                    onOpenFriendsDialog = { viewModel.setShowFriendsDialog(true) },
+                    onEditProfile = { viewModel.setShowAuthDialog(true) },
+                    hasActiveGame = tableState.boardTiles.isNotEmpty() || tableState.players.any { it.totalScore > 0 },
+                    onResumeGame = { viewModel.setInTableLobby(false) },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                )
+            } else {
+                // Interactive Domino Table Screen (Play vs Bots / Online Friends)
+                DominoTableView(
+                    state = tableState,
+                    selectedTile = selectedTile,
+                    onSelectTile = { viewModel.setSelectedTile(it) },
+                    onPlayTile = { tile, placement -> viewModel.playHumanTile(tile, placement) },
+                    onDrawTile = { viewModel.drawHumanTile() },
+                    onPassTurn = { viewModel.passHumanTurn() },
+                    onNextRound = { viewModel.nextTableRound() },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                )
+            }
+        } else {
+            // Scorer Screen (Anotador Actual)
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp)
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Row(
+                // Mode Switcher: "Por Rondas" vs "Acumulación Total"
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(4.dp)
+                        .padding(vertical = 6.dp)
                 ) {
-                    val isRounds = state.displayMode == ScoringDisplayMode.RONDAS
-                    Surface(
-                        onClick = { viewModel.setDisplayMode(ScoringDisplayMode.RONDAS) },
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (isRounds) MaterialTheme.colorScheme.surface else Color.Transparent,
-                        shadowElevation = if (isRounds) 2.dp else 0.dp,
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("tab_mode_rounds")
+                            .fillMaxWidth()
+                            .padding(4.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(vertical = 10.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
+                        val isRounds = state.displayMode == ScoringDisplayMode.RONDAS
+                        Surface(
+                            onClick = { viewModel.setDisplayMode(ScoringDisplayMode.RONDAS) },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isRounds) MaterialTheme.colorScheme.surface else Color.Transparent,
+                            shadowElevation = if (isRounds) 2.dp else 0.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("tab_mode_rounds")
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.ViewAgenda,
-                                contentDescription = null,
-                                tint = if (isRounds) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Por Rondas",
-                                fontSize = 13.sp,
-                                fontWeight = if (isRounds) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isRounds) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    val isQuick = state.displayMode == ScoringDisplayMode.ACUMULACION
-                    Surface(
-                        onClick = { viewModel.setDisplayMode(ScoringDisplayMode.ACUMULACION) },
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (isQuick) MaterialTheme.colorScheme.surface else Color.Transparent,
-                        shadowElevation = if (isQuick) 2.dp else 0.dp,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("tab_mode_accumulation")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(vertical = 10.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Speed,
-                                contentDescription = null,
-                                tint = if (isQuick) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Acumulación Total",
-                                fontSize = 13.sp,
-                                fontWeight = if (isQuick) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isQuick) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Scoreboards Section
-            if (state.playerNames.size == 2) {
-                // 2 Teams / Players side-by-side
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    ScoreCard(
-                        playerIndex = 0,
-                        name = state.playerNames[0],
-                        score = state.scores[0],
-                        targetScore = state.targetScore,
-                        isLeader = highestScore > 0 && state.scores[0] == highestScore,
-                        showQuickControls = state.displayMode == ScoringDisplayMode.ACUMULACION,
-                        onQuickAdd = { delta -> viewModel.quickAddPoints(0, delta) },
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    ScoreCard(
-                        playerIndex = 1,
-                        name = state.playerNames[1],
-                        score = state.scores[1],
-                        targetScore = state.targetScore,
-                        isLeader = highestScore > 0 && state.scores[1] == highestScore,
-                        showQuickControls = state.displayMode == ScoringDisplayMode.ACUMULACION,
-                        onQuickAdd = { delta -> viewModel.quickAddPoints(1, delta) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            } else {
-                // 3 or 4 Players grid
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    state.playerNames.chunked(2).forEach { rowNames ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            rowNames.forEach { name ->
-                                val idx = state.playerNames.indexOf(name)
-                                ScoreCard(
-                                    playerIndex = idx,
-                                    name = name,
-                                    score = state.scores.getOrElse(idx) { 0 },
-                                    targetScore = state.targetScore,
-                                    isLeader = highestScore > 0 && state.scores.getOrElse(idx) { 0 } == highestScore,
-                                    showQuickControls = state.displayMode == ScoringDisplayMode.ACUMULACION,
-                                    onQuickAdd = { delta -> viewModel.quickAddPoints(idx, delta) },
-                                    modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ViewAgenda,
+                                    contentDescription = null,
+                                    tint = if (isRounds) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Por Rondas",
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isRounds) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isRounds) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            if (rowNames.size == 1) {
-                                Spacer(modifier = Modifier.weight(1f))
+                        }
+
+                        val isQuick = state.displayMode == ScoringDisplayMode.ACUMULACION
+                        Surface(
+                            onClick = { viewModel.setDisplayMode(ScoringDisplayMode.ACUMULACION) },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isQuick) MaterialTheme.colorScheme.surface else Color.Transparent,
+                            shadowElevation = if (isQuick) 2.dp else 0.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("tab_mode_quick")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Speed,
+                                    contentDescription = null,
+                                    tint = if (isQuick) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Acumulación Total",
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isQuick) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isQuick) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-            // Quick Tool Bar: "Calculadora de Tranca" & "Nueva Partida" shortcuts
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(
-                    onClick = { viewModel.setShowTrancaCalculator(true) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("btn_tranca_calculator_shortcut")
-                ) {
+                // Score Cards Grid (2 to 4 players/teams)
+                val chunkedPlayers = state.playerNames.indices.chunked(2)
+                chunkedPlayers.forEach { rowIndices ->
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Calculate,
-                            contentDescription = null,
-                            tint = DominoGold,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Calcular Tranca",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
+                        rowIndices.forEach { playerIndex ->
+                            val score = state.scores.getOrElse(playerIndex) { 0 }
+                            val isLeader = highestScore > 0 && score == highestScore
+                            ScoreCard(
+                                playerIndex = playerIndex,
+                                name = state.playerNames[playerIndex],
+                                score = score,
+                                targetScore = state.targetScore,
+                                isLeader = isLeader,
+                                showQuickControls = state.displayMode == ScoringDisplayMode.ACUMULACION,
+                                onQuickAdd = { pts ->
+                                    viewModel.quickAddPoints(playerIndex, pts)
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (rowIndices.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+
+                // Table of Detailed Rounds
+                AnimatedVisibility(
+                    visible = state.rounds.isNotEmpty(),
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    Column(modifier = Modifier.padding(top = 16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Historial de Rondas (${state.rounds.size})",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                            if (state.rounds.isNotEmpty()) {
+                                Text(
+                                    text = "Ronda actual: #${state.rounds.size + 1}",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        RoundsTableView(
+                            rounds = state.rounds,
+                            playerNames = state.playerNames,
+                            onDeleteRound = { roundId ->
+                                viewModel.deleteRound(roundId)
+                            }
                         )
                     }
                 }
 
-                Surface(
-                    onClick = { viewModel.setShowNewGameDialog(true) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("btn_new_game_shortcut")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PostAdd,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Nueva Partida",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
+                // Extra bottom space for scrolling above FAB
+                Spacer(modifier = Modifier.height(80.dp))
             }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Rounds List Section
-            RoundsTableView(
-                rounds = state.rounds,
-                playerNames = state.playerNames,
-                onDeleteRound = { roundId -> viewModel.deleteRound(roundId) }
-            )
-
-            // Bottom spacing to avoid floating action button overlap
-            Spacer(modifier = Modifier.height(84.dp))
         }
     }
 
@@ -480,6 +580,27 @@ fun DominoGameScreen(
             onRematch = {
                 viewModel.resetGame()
             }
+        )
+    }
+
+    if (state.showAuthDialog) {
+        GoogleAccountDialog(
+            currentUser = currentUser,
+            onSignIn = { email, name -> viewModel.signInGoogle(email, name) },
+            onSignOut = { viewModel.signOutGoogle() },
+            onUpdateName = { viewModel.updatePlayerDisplayName(it) },
+            onDismiss = { viewModel.setShowAuthDialog(false) }
+        )
+    }
+
+    if (state.showFriendsDialog) {
+        FriendsRoomDialog(
+            currentRoomCode = tableState.roomCode,
+            userDisplayName = currentUser?.displayName ?: "Tú",
+            initialPlayerCount = tableState.players.size,
+            onCreateRoom = { code, count -> viewModel.createFriendsRoom(code, count) },
+            onJoinRoom = { code -> viewModel.joinFriendsRoom(code) },
+            onDismiss = { viewModel.setShowFriendsDialog(false) }
         )
     }
 }

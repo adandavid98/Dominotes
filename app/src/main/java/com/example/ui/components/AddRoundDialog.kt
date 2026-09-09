@@ -282,7 +282,7 @@ fun AddRoundDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf(5, 10, 15, 20, 25, 30, 40, 50).forEach { value ->
+                    listOf(5, 10, 15, 20, 25, 30, 35, 40, 50).forEach { value ->
                         Surface(
                             onClick = {
                                 val current = pointsText.toIntOrNull() ?: 0
