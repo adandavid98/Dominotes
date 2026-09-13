@@ -130,7 +130,9 @@ object DominoEngine {
             isBlocked = false,
             roomCode = roomCode,
             playMode = playMode,
-            teamScores = teamScores
+            teamScores = teamScores,
+            targetPlayerCount = players.size,
+            isWaitingForGuests = false
         )
     }
 
@@ -209,7 +211,11 @@ object DominoEngine {
         val updatedPlayers = state.players.toMutableList()
         updatedPlayers[playerIndex] = updatedPlayer
 
-        val log = "${player.name} jugó [${tile.left}|${tile.right}]"
+        val log = if (state.boardTiles.isEmpty()) {
+            "${player.name} abrió con la ficha [${tile.left}|${tile.right}]"
+        } else {
+            "${player.name} jugó la ficha [${tile.left}|${tile.right}]"
+        }
 
         // Check if player won the round (emptied hand)
         if (updatedHand.isEmpty()) {
@@ -249,10 +255,19 @@ object DominoEngine {
             }
 
             val teamName = if (winnerTeamId == 0) "Tu Pareja" else "Pareja Rival"
+            val isHumanWinner = !updatedPlayer.isBot
             val winMsg = if (isTeams) {
-                "¡${updatedPlayer.name} dominó! $teamName suma +$pointsWon pts"
+                if (isHumanWinner) {
+                    "¡Ganaste tú! $teamName suma +$pointsWon pts"
+                } else {
+                    "¡${updatedPlayer.name} dominó! $teamName suma +$pointsWon pts"
+                }
             } else {
-                "¡${updatedPlayer.name} dominó la ronda y sumó +$pointsWon pts!"
+                if (isHumanWinner) {
+                    "¡Ganaste tú la ronda y sumaste +$pointsWon pts!"
+                } else {
+                    "¡${updatedPlayer.name} dominó la ronda y sumó +$pointsWon pts!"
+                }
             }
 
             return state.copy(
@@ -267,7 +282,10 @@ object DominoEngine {
                 roundWinnerIndex = playerIndex,
                 pointsWonThisRound = pointsWon,
                 isBlocked = false,
-                lastActionLog = winMsg
+                lastActionLog = winMsg,
+                lastPlayedTile = tile,
+                lastPlayedByPlayerName = player.name,
+                lastPlayedByPlayerIndex = playerIndex
             )
         }
 
@@ -280,7 +298,10 @@ object DominoEngine {
             initialTileId = newInitialTileId,
             currentTurnIndex = nextTurn,
             consecutivePasses = 0,
-            lastActionLog = log
+            lastActionLog = log,
+            lastPlayedTile = tile,
+            lastPlayedByPlayerName = player.name,
+            lastPlayedByPlayerIndex = playerIndex
         )
     }
 
@@ -300,14 +321,14 @@ object DominoEngine {
         return state.copy(
             players = updatedPlayers,
             boneyard = remainingBoneyard,
-            lastActionLog = "${player.name} tomó una ficha del pozo"
+            lastActionLog = "${player.name} robó del pozo"
         )
     }
 
     fun passTurn(state: DominoTableState, playerIndex: Int): DominoTableState {
         val player = state.players[playerIndex]
         val newPasses = state.consecutivePasses + 1
-        val updatedLog = "${player.name} pasó turno (Paso $newPasses)"
+        val updatedLog = "${player.name} pasó turno"
 
         // Check for Tranca / Blocked game
         if (newPasses >= state.players.size) {
@@ -369,10 +390,19 @@ object DominoEngine {
         }
 
         val teamLabel = if (winnerTeamId == 0) "Tu Pareja" else "Pareja Rival"
+        val isHumanWinner = !winnerPlayer.isBot
         val logMsg = if (isTeams) {
-            "¡Tranca! Ganó ${winnerPlayer.name} ($minPoints pts). $teamLabel suma +$sumPointsWon pts"
+            if (isHumanWinner) {
+                "¡Tranca! Ganaste tú ($minPoints pts). $teamLabel suma +$sumPointsWon pts"
+            } else {
+                "¡Tranca! Ganó ${winnerPlayer.name} ($minPoints pts). $teamLabel suma +$sumPointsWon pts"
+            }
         } else {
-            "¡Tranca! Ganó ${winnerPlayer.name} con $minPoints pts (+ $sumPointsWon pts de mesa)"
+            if (isHumanWinner) {
+                "¡Tranca! Ganaste tú con $minPoints pts (+ $sumPointsWon pts de mesa)"
+            } else {
+                "¡Tranca! Ganó ${winnerPlayer.name} con $minPoints pts (+ $sumPointsWon pts de mesa)"
+            }
         }
 
         return state.copy(

@@ -486,9 +486,11 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
 
     fun playHumanTile(tile: DominoTile, placement: TilePlacement) {
         val currentState = _tableState.value
-        if (currentState.currentTurnIndex != 0 || currentState.status != TableGameStatus.PLAYING) return
+        val turnIdx = currentState.currentTurnIndex
+        val player = currentState.players.getOrNull(turnIdx)
+        if (player == null || player.isBot || currentState.status != TableGameStatus.PLAYING) return
 
-        val newState = DominoEngine.playTile(currentState, 0, tile, placement)
+        val newState = DominoEngine.playTile(currentState, turnIdx, tile, placement)
         _tableState.value = newState
         _selectedTile.value = null
 
@@ -497,18 +499,28 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
 
     fun drawHumanTile() {
         val currentState = _tableState.value
-        if (currentState.currentTurnIndex != 0 || currentState.status != TableGameStatus.PLAYING) return
+        val turnIdx = currentState.currentTurnIndex
+        val player = currentState.players.getOrNull(turnIdx)
+        if (player == null || player.isBot || currentState.status != TableGameStatus.PLAYING) return
+        // Regla oficial de dominó: No se puede robar si ya tienes fichas que puedes jugar
+        if (DominoEngine.canPlayerPlay(player, currentState)) return
 
-        val newState = DominoEngine.drawFromBoneyard(currentState, 0)
+        val newState = DominoEngine.drawFromBoneyard(currentState, turnIdx)
         _tableState.value = newState
         checkTriggerBotTurns()
     }
 
     fun passHumanTurn() {
         val currentState = _tableState.value
-        if (currentState.currentTurnIndex != 0 || currentState.status != TableGameStatus.PLAYING) return
+        val turnIdx = currentState.currentTurnIndex
+        val player = currentState.players.getOrNull(turnIdx)
+        if (player == null || player.isBot || currentState.status != TableGameStatus.PLAYING) return
+        // Regla oficial de dominó: No se puede pasar si tienes fichas que puedes tirar en la mesa
+        if (DominoEngine.canPlayerPlay(player, currentState)) return
+        // Tampoco se puede pasar si aún quedan fichas por robar en el pozo
+        if (currentState.boneyard.isNotEmpty()) return
 
-        val newState = DominoEngine.passTurn(currentState, 0)
+        val newState = DominoEngine.passTurn(currentState, turnIdx)
         _tableState.value = newState
         _selectedTile.value = null
         checkTriggerBotTurns()
@@ -537,13 +549,29 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private var botTurnJob: kotlinx.coroutines.Job? = null
+
     private fun checkTriggerBotTurns() {
-        viewModelScope.launch {
+        botTurnJob?.cancel()
+        botTurnJob = viewModelScope.launch {
             while (_tableState.value.status == TableGameStatus.PLAYING &&
-                _tableState.value.currentTurnIndex != 0
+                _tableState.value.currentTurnIndex in _tableState.value.players.indices &&
+                _tableState.value.players[_tableState.value.currentTurnIndex].isBot
             ) {
                 val botIdx = _tableState.value.currentTurnIndex
-                delay(900) // Realistic bot think delay
+                val bot = _tableState.value.players.getOrNull(botIdx)
+                if (bot != null) {
+                    _tableState.update { current ->
+                        current.copy(lastActionLog = "${bot.name} está pensando...")
+                    }
+                }
+                delay(3000L) // Al menos 3 segundos para que los bots pongan las fichas y se aprecie mejor la jugada
+
+                if (_tableState.value.status != TableGameStatus.PLAYING ||
+                    _tableState.value.currentTurnIndex != botIdx
+                ) {
+                    break
+                }
 
                 val decision = DominoEngine.computeBotMove(_tableState.value, botIdx)
                 when (decision) {
@@ -554,25 +582,262 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
                             decision.tile,
                             decision.placement
                         )
+                        // Pausa de 2.5s para que se aprecie la ficha jugada y el mensaje con la ficha colocada
+                        delay(2500L)
                     }
                     is DominoEngine.BotDecision.Draw -> {
                         _tableState.value = DominoEngine.drawFromBoneyard(_tableState.value, botIdx)
+                        delay(1800L)
                     }
                     is DominoEngine.BotDecision.Pass -> {
                         _tableState.value = DominoEngine.passTurn(_tableState.value, botIdx)
+                        delay(1800L)
                     }
                 }
             }
         }
     }
 
-    fun createFriendsRoom(code: String, playerCount: Int = 4) {
-        val botCount = (playerCount - 1).coerceIn(1, 3)
-        startNewDominoTableGame(roomCode = code, botCount = botCount)
+    fun createFriendsRoom(
+        code: String,
+        playerCount: Int = 4,
+        playMode: DominoGamePlayMode = if (playerCount == 4) DominoGamePlayMode.PAREJAS_2V2 else DominoGamePlayMode.INDIVIDUAL
+    ) {
+        val hostName = authRepository.currentUser.value?.displayName ?: "Tú"
+        val hostPlayer = com.example.data.domino.DominoPlayer(
+            id = "host_player",
+            name = "$hostName (Anfitrión)",
+            isBot = false,
+            avatarColorIndex = 0,
+            teamId = 0
+        )
+
+        _tableState.value = DominoTableState(
+            players = listOf(hostPlayer),
+            currentTurnIndex = 0,
+            boardTiles = emptyList(),
+            boneyard = emptyList(),
+            status = TableGameStatus.WAITING_START,
+            targetScore = 100,
+            lastActionLog = "Sala $code creada. Esperando a que entren los participantes (1/$playerCount) con el código.",
+            roomCode = code.trim().uppercase(),
+            playMode = playMode,
+            teamScores = listOf(0, 0),
+            targetPlayerCount = playerCount.coerceIn(2, 4),
+            isWaitingForGuests = true
+        )
+        _selectedTile.value = null
+        _gameState.update {
+            it.copy(
+                inTableLobby = false,
+                showFriendsDialog = false
+            )
+        }
     }
 
-    fun joinFriendsRoom(code: String) {
-        startNewDominoTableGame(roomCode = code)
-        _gameState.update { it.copy(showFriendsDialog = false) }
+    fun joinFriendsRoom(code: String, guestName: String? = null) {
+        val trimmedCode = code.trim().uppercase()
+        val current = _tableState.value
+
+        // If joining the active waiting room on this device
+        if (current.roomCode?.equals(trimmedCode, ignoreCase = true) == true && current.status == TableGameStatus.WAITING_START) {
+            if (current.players.size < current.targetPlayerCount) {
+                val nextIndex = current.players.size
+                val defaultName = guestName?.ifBlank { null } ?: "Invitado ${nextIndex + 1}"
+                val teamId = if (current.playMode.isTeams && current.targetPlayerCount == 4) {
+                    if (nextIndex == 2) 0 else 1
+                } else {
+                    nextIndex
+                }
+                val newPlayer = com.example.data.domino.DominoPlayer(
+                    id = "guest_${System.currentTimeMillis()}_$nextIndex",
+                    name = defaultName,
+                    isBot = false,
+                    avatarColorIndex = nextIndex % 4,
+                    teamId = teamId
+                )
+                val updatedPlayers = current.players + newPlayer
+                val isFull = updatedPlayers.size >= current.targetPlayerCount
+                val log = if (isFull) {
+                    "¡$defaultName entró con el código! Todos los participantes listos (${updatedPlayers.size}/${current.targetPlayerCount})."
+                } else {
+                    "$defaultName entró con el código. Conectados: ${updatedPlayers.size}/${current.targetPlayerCount}."
+                }
+
+                _tableState.value = current.copy(
+                    players = updatedPlayers,
+                    lastActionLog = log
+                )
+            }
+        } else {
+            // Join a new room by code
+            val myName = guestName?.ifBlank { null } ?: (authRepository.currentUser.value?.displayName ?: "Invitado 1")
+            val hostPlayer = com.example.data.domino.DominoPlayer(
+                id = "guest_${System.currentTimeMillis()}",
+                name = myName,
+                isBot = false,
+                avatarColorIndex = 0,
+                teamId = 0
+            )
+            _tableState.value = DominoTableState(
+                players = listOf(hostPlayer),
+                currentTurnIndex = 0,
+                boardTiles = emptyList(),
+                boneyard = emptyList(),
+                status = TableGameStatus.WAITING_START,
+                targetScore = 100,
+                lastActionLog = "Te has unido a la sala $trimmedCode. Esperando al resto de participantes...",
+                roomCode = trimmedCode,
+                playMode = DominoGamePlayMode.PAREJAS_2V2,
+                teamScores = listOf(0, 0),
+                targetPlayerCount = 4,
+                isWaitingForGuests = true
+            )
+        }
+
+        _gameState.update {
+            it.copy(
+                inTableLobby = false,
+                showFriendsDialog = false
+            )
+        }
+    }
+
+    fun addGuestWithCode(name: String) {
+        val current = _tableState.value
+        if (current.status != TableGameStatus.WAITING_START || current.players.size >= current.targetPlayerCount) return
+
+        val nextIndex = current.players.size
+        val guestName = name.ifBlank { "Invitado ${nextIndex + 1}" }
+        val teamId = if (current.playMode.isTeams && current.targetPlayerCount == 4) {
+            if (nextIndex == 2) 0 else 1
+        } else {
+            nextIndex
+        }
+
+        val newPlayer = com.example.data.domino.DominoPlayer(
+            id = "guest_${System.currentTimeMillis()}_$nextIndex",
+            name = guestName,
+            isBot = false,
+            avatarColorIndex = nextIndex % 4,
+            teamId = teamId
+        )
+        val updatedPlayers = current.players + newPlayer
+        val isFull = updatedPlayers.size >= current.targetPlayerCount
+        val log = if (isFull) {
+            "¡$guestName se unió con el código! Todos los participantes (${updatedPlayers.size}/${current.targetPlayerCount}) listos para iniciar."
+        } else {
+            "$guestName se unió con el código ${current.roomCode}. Esperando a los demás (${updatedPlayers.size}/${current.targetPlayerCount})."
+        }
+
+        _tableState.value = current.copy(
+            players = updatedPlayers,
+            lastActionLog = log
+        )
+    }
+
+    fun removePlayerFromWaitingRoom(playerIndex: Int) {
+        val current = _tableState.value
+        if (current.status != TableGameStatus.WAITING_START || playerIndex <= 0 || playerIndex >= current.players.size) return
+        val removed = current.players[playerIndex]
+        val updatedPlayers = current.players.filterIndexed { index, _ -> index != playerIndex }
+        _tableState.value = current.copy(
+            players = updatedPlayers,
+            lastActionLog = "${removed.name} salió de la sala (${updatedPlayers.size}/${current.targetPlayerCount})."
+        )
+    }
+
+    fun startWaitingRoomGame() {
+        val current = _tableState.value
+        if (current.players.size < current.targetPlayerCount) return
+
+        // Configure player teams according to playMode and total players
+        val configuredPlayers = current.players.mapIndexed { idx, player ->
+            val teamId = if (current.playMode.isTeams && current.targetPlayerCount == 4) {
+                if (idx == 0 || idx == 2) 0 else 1
+            } else {
+                idx
+            }
+            player.copy(teamId = teamId)
+        }
+
+        val startedState = DominoEngine.dealRound(
+            players = configuredPlayers,
+            targetScore = current.targetScore,
+            roomCode = current.roomCode,
+            playMode = current.playMode,
+            teamScores = listOf(0, 0)
+        )
+
+        _tableState.value = startedState.copy(
+            targetPlayerCount = current.targetPlayerCount,
+            isWaitingForGuests = false
+        )
+        _selectedTile.value = null
+        checkTriggerBotTurns()
+    }
+
+    fun fillRemainingSlotsWithBotsAndStart() {
+        val current = _tableState.value
+        val needed = current.targetPlayerCount - current.players.size
+        if (needed <= 0) {
+            startWaitingRoomGame()
+            return
+        }
+
+        val botNames = listOf("Carlos (Bot)", "María (Bot)", "Luis (Bot)")
+        val mutablePlayers = current.players.toMutableList()
+        val isTeams = current.playMode.isTeams && current.targetPlayerCount == 4
+
+        for (i in 0 until needed) {
+            val playerIndex = mutablePlayers.size
+            val teamId = if (isTeams) {
+                if (playerIndex == 2) 0 else 1
+            } else {
+                playerIndex
+            }
+            val botName = botNames.getOrElse(i) { "Bot ${i + 1}" }
+            mutablePlayers.add(
+                com.example.data.domino.DominoPlayer(
+                    id = "bot_${System.currentTimeMillis()}_$i",
+                    name = botName,
+                    isBot = true,
+                    avatarColorIndex = playerIndex % 4,
+                    teamId = teamId
+                )
+            )
+        }
+
+        val configuredPlayers = mutablePlayers.mapIndexed { idx, player ->
+            val teamId = if (isTeams) {
+                if (idx == 0 || idx == 2) 0 else 1
+            } else {
+                idx
+            }
+            player.copy(teamId = teamId)
+        }
+
+        val startedState = DominoEngine.dealRound(
+            players = configuredPlayers,
+            targetScore = current.targetScore,
+            roomCode = current.roomCode,
+            playMode = current.playMode,
+            teamScores = listOf(0, 0)
+        )
+
+        _tableState.value = startedState.copy(
+            targetPlayerCount = current.targetPlayerCount,
+            isWaitingForGuests = false
+        )
+        _selectedTile.value = null
+        checkTriggerBotTurns()
+    }
+
+    fun cancelWaitingRoom() {
+        _tableState.value = _tableState.value.copy(
+            status = TableGameStatus.GAME_OVER,
+            isWaitingForGuests = false
+        )
+        _gameState.update { it.copy(inTableLobby = true) }
     }
 }

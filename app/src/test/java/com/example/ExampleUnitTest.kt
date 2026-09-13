@@ -88,9 +88,74 @@ class ExampleUnitTest {
     // Round should be won
     assertEquals(com.example.data.domino.TableGameStatus.ROUND_OVER, resultState.status)
     assertEquals(0, resultState.roundWinnerIndex)
+    assertTrue(resultState.lastActionLog.contains("¡Ganaste tú!"))
 
     // Team 0 should have gained the points of Team 1 (players 1 and 3)
     val expectedPoints = state.players[1].remainingTilePoints + state.players[3].remainingTilePoints
     assertEquals(expectedPoints, resultState.teamScores[0])
+  }
+
+  @Test
+  fun testHumanWinMessageInIndividualAndBlocked() {
+    val human = com.example.data.domino.DominoPlayer(id = "p0", name = "Tú", hand = listOf(DominoTile(1, 2, 3)), isBot = false, teamId = 0)
+    val bot = com.example.data.domino.DominoPlayer(id = "p1", name = "Carlos (Bot)", hand = listOf(DominoTile(4, 5, 45)), isBot = true, teamId = 1)
+    val state = com.example.data.domino.DominoTableState(
+      players = listOf(human, bot),
+      boardTiles = listOf(DominoTile(1, 1, 11)),
+      leftEnd = 1,
+      rightEnd = 1,
+      playMode = com.example.data.domino.DominoGamePlayMode.INDIVIDUAL
+    )
+
+    // Play last tile
+    val resState = com.example.data.domino.DominoEngine.playTile(state, 0, human.hand.first(), com.example.data.domino.TilePlacement.LEFT)
+    assertTrue("Should say '¡Ganaste tú la ronda' in individual mode", resState.lastActionLog.startsWith("¡Ganaste tú la ronda"))
+
+    // Test blocked game (tranca) where human wins with lowest points
+    val humanWithLowPoints = com.example.data.domino.DominoPlayer(id = "p0", name = "Tú", hand = listOf(DominoTile(0, 1, 1)), isBot = false, teamId = 0)
+    val botWithHighPoints = com.example.data.domino.DominoPlayer(id = "p1", name = "Carlos (Bot)", hand = listOf(DominoTile(6, 6, 66)), isBot = true, teamId = 1)
+    val blockedState = com.example.data.domino.DominoTableState(
+      players = listOf(humanWithLowPoints, botWithHighPoints),
+      boardTiles = listOf(DominoTile(2, 3, 23)),
+      leftEnd = 2,
+      rightEnd = 3,
+      playMode = com.example.data.domino.DominoGamePlayMode.INDIVIDUAL
+    )
+    val resBlocked = com.example.data.domino.DominoEngine.passTurn(blockedState.copy(consecutivePasses = 1), 1)
+    assertTrue("Should say '¡Tranca! Ganaste tú' when human has lowest points", resBlocked.lastActionLog.startsWith("¡Tranca! Ganaste tú"))
+  }
+
+  @Test
+  fun testCannotPassWhenPlayerHasPlayableTiles() {
+    // Board ends: leftEnd = 0, rightEnd = 1
+    // Player hand: [0|3]
+    val playableTile = DominoTile(0, 3, 3)
+    val nonPlayableTile = DominoTile(4, 5, 45)
+
+    val playerWithPlayable = com.example.data.domino.DominoPlayer(
+      id = "p0",
+      name = "Tú",
+      hand = listOf(playableTile),
+      isBot = false
+    )
+    val playerWithoutPlayable = com.example.data.domino.DominoPlayer(
+      id = "p1",
+      name = "Bot",
+      hand = listOf(nonPlayableTile),
+      isBot = true
+    )
+
+    val state = com.example.data.domino.DominoTableState(
+      players = listOf(playerWithPlayable, playerWithoutPlayable),
+      leftEnd = 0,
+      rightEnd = 1,
+      boardTiles = listOf(DominoTile(0, 1, 1))
+    )
+
+    // Player with [0|3] MUST be recognized as having a valid play (canPlayerPlay == true)
+    assertTrue("Player with [0|3] must be able to play on end 0", com.example.data.domino.DominoEngine.canPlayerPlay(playerWithPlayable, state))
+
+    // Player with [4|5] cannot play on ends 0 and 1
+    assertFalse("Player with [4|5] cannot play on ends 0 and 1", com.example.data.domino.DominoEngine.canPlayerPlay(playerWithoutPlayable, state))
   }
 }

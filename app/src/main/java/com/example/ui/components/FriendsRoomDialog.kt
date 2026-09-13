@@ -52,10 +52,11 @@ fun FriendsRoomDialog(
     userDisplayName: String,
     initialPlayerCount: Int = 4,
     onCreateRoom: (code: String, playerCount: Int) -> Unit,
-    onJoinRoom: (String) -> Unit,
+    onJoinRoom: (code: String, guestName: String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     var joinCodeInput by remember { mutableStateOf("") }
+    var joinNameInput by remember { mutableStateOf("") }
     var showJoinMode by remember { mutableStateOf(false) }
     var roomPlayerCount by remember { mutableIntStateOf(initialPlayerCount) }
 
@@ -136,31 +137,49 @@ fun FriendsRoomDialog(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "La sala esperará a que todos los participantes requeridos ingresen con este código antes de repartir las fichas.",
+                        fontSize = 11.sp,
+                        color = DominoGold,
+                        textAlign = TextAlign.Center
+                    )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     Button(
                         onClick = onDismiss,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Ir a la Mesa de Juego", fontWeight = FontWeight.Bold)
+                        Text("Ir a la Sala de Espera", fontWeight = FontWeight.Bold)
                     }
                 } else if (showJoinMode) {
                     // Join with code input
                     Text(
-                        text = "Ingresa el código de 6 letras que te compartió tu amigo:",
+                        text = "Ingresa el código que te compartió tu amigo:",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     OutlinedTextField(
                         value = joinCodeInput,
-                        onValueChange = { if (it.length <= 6) joinCodeInput = it.uppercase() },
+                        onValueChange = { if (it.length <= 8) joinCodeInput = it.uppercase() },
                         label = { Text("Código de Sala") },
                         placeholder = { Text("Ej: DOM782") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = joinNameInput,
+                        onValueChange = { joinNameInput = it },
+                        label = { Text("Tu Nombre (Opcional)") },
+                        placeholder = { Text(userDisplayName) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -180,7 +199,9 @@ fun FriendsRoomDialog(
                         Button(
                             onClick = {
                                 if (joinCodeInput.isNotBlank()) {
-                                    onJoinRoom(joinCodeInput.trim())
+                                    val name = joinNameInput.ifBlank { userDisplayName }
+                                    onJoinRoom(joinCodeInput.trim(), name)
+                                    onDismiss()
                                 }
                             },
                             enabled = joinCodeInput.length >= 4,

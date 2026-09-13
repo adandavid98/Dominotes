@@ -1,11 +1,20 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.key
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +41,27 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Casino
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Group
@@ -62,8 +92,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.domino.DominoEngine
 import com.example.data.domino.DominoPlayer
 import com.example.data.domino.DominoTableState
 import com.example.data.domino.DominoTile
@@ -78,6 +110,13 @@ private val PlayerColors = listOf(
     Color(0xFFA78BFA)  // Violet (Opponent 3)
 )
 
+private data class PlayerFlightTrajectory(
+    val startX: Float,
+    val startY: Float,
+    val startScale: Float,
+    val startRotation: Float
+)
+
 @Composable
 fun DominoTableView(
     state: DominoTableState,
@@ -87,11 +126,74 @@ fun DominoTableView(
     onDrawTile: () -> Unit,
     onPassTurn: () -> Unit,
     onNextRound: () -> Unit,
+    onStartWaitingGame: () -> Unit = {},
+    onAddGuest: (String) -> Unit = {},
+    onRemoveGuest: (Int) -> Unit = {},
+    onFillBotsAndStart: () -> Unit = {},
+    onCancelWaitingRoom: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val humanPlayerIndex = state.players.indexOfFirst { !it.isBot }.takeIf { it >= 0 } ?: 0
-    val humanPlayer = state.players.getOrNull(humanPlayerIndex)
-    val isHumanTurn = state.currentTurnIndex == humanPlayerIndex && state.status == TableGameStatus.PLAYING
+    if (state.status == TableGameStatus.WAITING_START) {
+        DominoRoomWaitingView(
+            state = state,
+            onStartGame = onStartWaitingGame,
+            onAddGuest = onAddGuest,
+            onRemoveGuest = onRemoveGuest,
+            onFillBotsAndStart = onFillBotsAndStart,
+            onCancel = onCancelWaitingRoom,
+            modifier = modifier
+        )
+        return
+    }
+
+    val currentTurnPlayer = state.players.getOrNull(state.currentTurnIndex)
+    val isCurrentTurnHuman = currentTurnPlayer != null && !currentTurnPlayer.isBot && state.status == TableGameStatus.PLAYING
+    val humanPlayer = if (isCurrentTurnHuman) {
+        currentTurnPlayer
+    } else {
+        state.players.firstOrNull { !it.isBot } ?: state.players.firstOrNull()
+    }
+    val isHumanTurn = isCurrentTurnHuman
+
+    // Trajectory calculation: Human tile comes from bottom hand ("fondo");
+    // opponents come from top: left, center, or right badge position
+    val humanIndex = state.players.indexOf(humanPlayer)
+    val opponents = state.players.filter { it != humanPlayer }
+    val flightTrajectory = remember(state.lastPlayedTile?.id, state.lastPlayedByPlayerIndex) {
+        val lastPlayerIndex = state.lastPlayedByPlayerIndex
+        if (lastPlayerIndex == humanIndex || (lastPlayerIndex == null && state.lastPlayedByPlayerName?.contains("Tú", ignoreCase = true) == true)) {
+            // Human player: emerges from the bottom deck/hand
+            PlayerFlightTrajectory(
+                startX = 0f,
+                startY = 380f,
+                startScale = 1.35f,
+                startRotation = 0f
+            )
+        } else {
+            // Opponents at the top row: left, center, right
+            val oppIndex = opponents.indexOfFirst { state.players.indexOf(it) == lastPlayerIndex }
+            when {
+                opponents.size >= 3 -> {
+                    when (oppIndex) {
+                        0 -> PlayerFlightTrajectory(startX = -260f, startY = -280f, startScale = 0.65f, startRotation = -14f) // Left bot
+                        1 -> PlayerFlightTrajectory(startX = 0f, startY = -290f, startScale = 0.65f, startRotation = 0f)       // Center bot / Partner
+                        else -> PlayerFlightTrajectory(startX = 260f, startY = -280f, startScale = 0.65f, startRotation = 14f) // Right bot
+                    }
+                }
+                opponents.size == 2 -> {
+                    if (oppIndex == 0) {
+                        PlayerFlightTrajectory(startX = -180f, startY = -280f, startScale = 0.65f, startRotation = -12f)
+                    } else {
+                        PlayerFlightTrajectory(startX = 180f, startY = -280f, startScale = 0.65f, startRotation = 12f)
+                    }
+                }
+                else -> {
+                    // 1 opponent: center top
+                    PlayerFlightTrajectory(startX = 0f, startY = -290f, startScale = 0.65f, startRotation = 0f)
+                }
+            }
+        }
+    }
 
     // Infinite animation for Turn Pulsing
     val turnTransition = rememberInfiniteTransition(label = "turn_pulse")
@@ -169,8 +271,10 @@ fun DominoTableView(
                             }
                         }
                         Spacer(modifier = Modifier.width(6.dp))
+                        val team0Players = state.players.filter { it.teamId == 0 }
+                        val team0Names = team0Players.joinToString(" + ") { it.name.split(" ").first() }.ifBlank { "Equipo 1" }
                         Column {
-                            Text("Tu Pareja (Tú + María)", fontSize = 11.sp, color = Color(0xFFE2E8F0), fontWeight = FontWeight.Bold)
+                            Text("Tu Pareja ($team0Names)", fontSize = 11.sp, color = Color(0xFFE2E8F0), fontWeight = FontWeight.Bold)
                             Text("$team0Score / ${state.targetScore} pts", fontSize = 11.sp, color = Color(0xFF38BDF8), fontWeight = FontWeight.ExtraBold)
                         }
                     }
@@ -192,8 +296,10 @@ fun DominoTableView(
 
                     // Team 1 (Rivales)
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val team1Players = state.players.filter { it.teamId == 1 }
+                        val team1Names = team1Players.joinToString(" + ") { it.name.split(" ").first() }.ifBlank { "Equipo 2" }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("Rivales (Carlos + Luis)", fontSize = 11.sp, color = Color(0xFFE2E8F0), fontWeight = FontWeight.Bold)
+                            Text("Rivales ($team1Names)", fontSize = 11.sp, color = Color(0xFFE2E8F0), fontWeight = FontWeight.Bold)
                             Text("$team1Score / ${state.targetScore} pts", fontSize = 11.sp, color = Color(0xFFF87171), fontWeight = FontWeight.ExtraBold)
                         }
                         Spacer(modifier = Modifier.width(6.dp))
@@ -221,9 +327,9 @@ fun DominoTableView(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
         ) {
-            state.players.drop(1).forEachIndexed { botRelIdx, opponent ->
+            state.players.filter { it != humanPlayer }.forEach { opponent ->
                 val actualIndex = state.players.indexOf(opponent)
                 val isTurn = state.currentTurnIndex == actualIndex && state.status == TableGameStatus.PLAYING
                 val isPartner = isTeamsMode && opponent.teamId == 0
@@ -255,19 +361,33 @@ fun DominoTableView(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
+                    val statusDotColor = when {
+                        state.lastActionLog.contains("pensando", ignoreCase = true) -> Color(0xFFF59E0B)
+                        state.lastActionLog.contains("jugó", ignoreCase = true) || state.lastActionLog.contains("abrió", ignoreCase = true) -> Color(0xFF10B981)
+                        state.lastActionLog.contains("robó", ignoreCase = true) -> Color(0xFF38BDF8)
+                        state.lastActionLog.contains("pasó", ignoreCase = true) -> Color(0xFFF87171)
+                        isHumanTurn -> Color(0xFF10B981)
+                        else -> Color(0xFF94A3B8)
+                    }
                     Box(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (isHumanTurn) Color(0xFF38BDF8) else Color(0xFF94A3B8))
+                            .background(statusDotColor)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
+                    val displayText = if (isHumanTurn && state.lastPlayedTile != null && state.lastPlayedByPlayerName != null) {
+                        "Última jugada: ${state.lastPlayedByPlayerName} jugó la ficha [${state.lastPlayedTile.left}|${state.lastPlayedTile.right}]"
+                    } else {
+                        state.lastActionLog
+                    }
                     Text(
-                        text = state.lastActionLog,
+                        text = displayText,
                         color = Color(0xFFF1F5F9),
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 if (state.boneyard.isNotEmpty()) {
@@ -373,43 +493,31 @@ fun DominoTableView(
                             }
                     ) {
                         layout.tiles.forEach { placedTile ->
-                            val isOpenLeft = placedTile.index == 0
-                            val isOpenRight = placedTile.index == state.boardTiles.size - 1
+                            key(placedTile.tile.id) {
+                                val isOpenLeft = placedTile.index == 0
+                                val isOpenRight = placedTile.index == state.boardTiles.size - 1
 
-                            val canPlayLeft = isOpenLeft && isHumanTurn && selectedTile != null && (state.leftEnd == null || selectedTile.canMatch(state.leftEnd))
-                            val canPlayRight = isOpenRight && isHumanTurn && selectedTile != null && (state.rightEnd == null || selectedTile.canMatch(state.rightEnd))
+                                val canPlayLeft = isOpenLeft && isHumanTurn && selectedTile != null && (state.leftEnd == null || selectedTile.canMatch(state.leftEnd))
+                                val canPlayRight = isOpenRight && isHumanTurn && selectedTile != null && (state.rightEnd == null || selectedTile.canMatch(state.rightEnd))
+                                val isNewlyPlaced = placedTile.tile.id == state.lastPlayedTile?.id
 
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = placedTile.x.dp, y = placedTile.y.dp)
-                                    .size(placedTile.width.dp, placedTile.height.dp)
-                                    .then(
+                                AnimatedPlacedTileView(
+                                    placedTile = placedTile,
+                                    isNewlyPlaced = isNewlyPlaced,
+                                    sourceStartX = flightTrajectory.startX,
+                                    sourceStartY = flightTrajectory.startY,
+                                    sourceScale = flightTrajectory.startScale,
+                                    sourceRotation = flightTrajectory.startRotation,
+                                    canPlayLeft = canPlayLeft,
+                                    canPlayRight = canPlayRight,
+                                    onPlayClick = {
                                         if (canPlayLeft) {
-                                            Modifier.clickable { onPlayTile(selectedTile!!, TilePlacement.LEFT) }
+                                            onPlayTile(selectedTile!!, TilePlacement.LEFT)
                                         } else if (canPlayRight) {
-                                            Modifier.clickable { onPlayTile(selectedTile!!, TilePlacement.RIGHT) }
-                                        } else {
-                                            Modifier
+                                            onPlayTile(selectedTile!!, TilePlacement.RIGHT)
                                         }
-                                    )
-                            ) {
-                                if (placedTile.isVertical) {
-                                    DominoTileView(
-                                        topPips = placedTile.topOrLeftPips,
-                                        bottomPips = placedTile.bottomOrRightPips,
-                                        width = placedTile.width.dp,
-                                        height = placedTile.height.dp,
-                                        isHighlighted = canPlayLeft || canPlayRight
-                                    )
-                                } else {
-                                    HorizontalDominoTileView(
-                                        leftPips = placedTile.topOrLeftPips,
-                                        rightPips = placedTile.bottomOrRightPips,
-                                        width = placedTile.width.dp,
-                                        height = placedTile.height.dp,
-                                        isHighlighted = canPlayLeft || canPlayRight
-                                    )
-                                }
+                                    }
+                                )
                             }
                         }
                     }
@@ -430,16 +538,16 @@ fun DominoTableView(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(Color(0xFF0F172A).copy(alpha = 0.95f))
                     .border(
                         if (isHumanTurn) 1.8.dp else 1.2.dp,
                         if (isHumanTurn) Color(0xFF10B981).copy(alpha = 0.85f) else Color(0xFF334155).copy(alpha = 0.7f),
-                        RoundedCornerShape(18.dp)
+                        RoundedCornerShape(16.dp)
                     )
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                // Player Name, Score, and Actions Row
+                // Player Name, Status, and Score Header Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -447,7 +555,8 @@ fun DominoTableView(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f, fill = false)
                     ) {
                         // Turn Pulsing Radar Dot
                         Box(
@@ -479,20 +588,22 @@ fun DominoTableView(
 
                         // Player Name
                         Text(
-                            text = if (player.name.equals("Tú", ignoreCase = true)) "Tú" else "${player.name} (Tú)",
+                            text = player.name,
                             color = if (isHumanTurn) Color.White else Color(0xFFE2E8F0),
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
 
                         // Highly visible "¡TU TURNO!" badge
                         if (isHumanTurn) {
                             Surface(
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = Color.Transparent,
-                                border = BorderStroke(1.5.dp, Color(0xFF6EE7B7)),
+                                border = BorderStroke(1.2.dp, Color(0xFF6EE7B7)),
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
+                                    .clip(RoundedCornerShape(12.dp))
                                     .background(
                                         Brush.horizontalGradient(
                                             colors = listOf(Color(0xFF047857), Color(0xFF10B981))
@@ -502,27 +613,62 @@ fun DominoTableView(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(6.dp)
+                                            .size(5.dp)
                                             .clip(CircleShape)
                                             .background(Color.White)
                                     )
-                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "¡TU TURNO!",
                                         color = Color.White,
                                         fontWeight = FontWeight.Black,
-                                        fontSize = 11.sp,
-                                        letterSpacing = 0.5.sp
+                                        fontSize = 10.sp,
+                                        letterSpacing = 0.5.sp,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }
                         }
+                    }
 
-                        // Score Pill
+                    // Score Pill and/or Bot turn indicator
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (!isHumanTurn && state.status == TableGameStatus.PLAYING) {
+                            val currentBot = state.players.getOrNull(state.currentTurnIndex)
+                            Text(
+                                text = "Turno de: ${currentBot?.name ?: "..."}",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else if (isHumanTurn && state.lastPlayedTile != null && state.lastPlayedByPlayerName != null) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF0F172A).copy(alpha = 0.85f),
+                                border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.45f))
+                            ) {
+                                Text(
+                                    text = "Última: ${state.lastPlayedByPlayerName!!.replace(" (Bot)", "")} [${state.lastPlayedTile.left}|${state.lastPlayedTile.right}]",
+                                    color = Color(0xFFBAE6FD),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
                         val isTeamsMode = state.playMode.isTeams && state.players.size == 4
                         val team0Score = state.teamScores.getOrElse(0) { player.totalScore }
                         Surface(
@@ -535,86 +681,174 @@ fun DominoTableView(
                                 color = Color(0xFF38BDF8),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
                     }
-
-                    // Interactive Action Buttons for Human
-                    if (isHumanTurn) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (state.boneyard.isNotEmpty()) {
-                                Button(
-                                    onClick = onDrawTile,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
-                                    contentPadding = PaddingValues(horizontal = 11.dp, vertical = 4.dp),
-                                    shape = RoundedCornerShape(9.dp),
-                                    modifier = Modifier.testTag("btn_draw_tile")
-                                ) {
-                                    Text("Robar (${state.boneyard.size})", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                            Button(
-                                onClick = onPassTurn,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
-                                contentPadding = PaddingValues(horizontal = 11.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(9.dp),
-                                modifier = Modifier.testTag("btn_pass_turn")
-                            ) {
-                                Text("Pasar", fontSize = 12.sp, color = Color(0xFFE2E8F0), fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    } else if (state.status == TableGameStatus.PLAYING) {
-                        val currentBot = state.players.getOrNull(state.currentTurnIndex)
-                        Text(
-                            text = "Turno de: ${currentBot?.name ?: "..."}",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-                // Quick Action Buttons when a playable tile is selected from hand
-                if (isHumanTurn && selectedTile != null && state.boardTiles.isNotEmpty()) {
-                    val canPlayLeft = state.leftEnd == null || selectedTile.canMatch(state.leftEnd)
-                    val canPlayRight = state.rightEnd == null || selectedTile.canMatch(state.rightEnd)
+                // Interactive Turn Actions Bar for Human (Dedicated row, perfectly sized, never squished)
+                if (isHumanTurn) {
+                    val playerHasPlayableTiles = DominoEngine.canPlayerPlay(player, state)
+                    val canPlayLeft = selectedTile != null && (state.leftEnd == null || selectedTile.canMatch(state.leftEnd))
+                    val canPlayRight = selectedTile != null && (state.rightEnd == null || selectedTile.canMatch(state.rightEnd))
+                    val hasPlayableOption = selectedTile != null && state.boardTiles.isNotEmpty() && (canPlayLeft || canPlayRight)
 
-                    if (canPlayLeft || canPlayRight) {
+                    if (hasPlayableOption) {
+                        // Left / Right placement buttons when a valid tile is selected
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (canPlayLeft) {
                                 Button(
-                                    onClick = { onPlayTile(selectedTile, TilePlacement.LEFT) },
+                                    onClick = { onPlayTile(selectedTile!!, TilePlacement.LEFT) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
                                     shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f)
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                        .testTag("btn_play_left")
                                 ) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Extremo Izq [${state.leftEnd ?: ""}]", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "Extremo Izq [${state.leftEnd ?: ""}]",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
                                 }
                             }
                             if (canPlayRight) {
                                 Button(
-                                    onClick = { onPlayTile(selectedTile, TilePlacement.RIGHT) },
+                                    onClick = { onPlayTile(selectedTile!!, TilePlacement.RIGHT) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
                                     shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f)
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                        .testTag("btn_play_right")
                                 ) {
-                                    Text("Extremo Der [${state.rightEnd ?: ""}]", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "Extremo Der [${state.rightEnd ?: ""}]",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(14.dp))
                                 }
                             }
+                            IconButton(
+                                onClick = { onSelectTile(null) },
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Deseleccionar", tint = Color(0xFF94A3B8))
+                            }
+                        }
+                    } else if (playerHasPlayableTiles) {
+                        // En dominó real: Si tienes fichas jugables, NO puedes pasar ni robar. Debes tirar una ficha.
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF0D251D),
+                            border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.6f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color(0xFF34D399),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (selectedTile != null) {
+                                        "Esa ficha no encaja. Toca una ficha con borde verde"
+                                    } else if (state.boardTiles.isEmpty()) {
+                                        "Tu turno: toca una ficha para abrir la mesa"
+                                    } else {
+                                        "Tu turno: toca una ficha con borde verde para tirarla"
+                                    },
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFFE2E8F0),
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        }
+                    } else if (state.boneyard.isNotEmpty()) {
+                        // En dominó real: Si no tienes fichas para tirar pero hay en el pozo, debes robar del pozo
+                        Button(
+                            onClick = onDrawTile,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF0284C7),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp)
+                                .testTag("btn_draw_tile")
+                        ) {
+                            Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Sin jugada — Robar del pozo (${state.boneyard.size})",
+                                fontSize = 12.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    } else {
+                        // En dominó real: SOLO se puede pasar cuando NO tienes fichas jugables Y el pozo está vacío
+                        Button(
+                            onClick = onPassTurn,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFDC2626),
+                                contentColor = Color(0xFFF1F5F9)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp)
+                                .testTag("btn_pass_turn")
+                        ) {
+                            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Sin fichas jugables ni pozo — Pasar Turno",
+                                fontSize = 12.sp,
+                                color = Color(0xFFFEE2E2),
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         }
                     }
                 }
@@ -624,7 +858,7 @@ fun DominoTableView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     player.hand.forEach { tile ->
@@ -640,7 +874,15 @@ fun DominoTableView(
                                 .clickable {
                                     if (isHumanTurn) {
                                         if (isSelected) {
-                                            onSelectTile(null)
+                                            val fitsLeft = state.boardTiles.isNotEmpty() && (state.leftEnd == null || tile.canMatch(state.leftEnd))
+                                            val fitsRight = state.boardTiles.isNotEmpty() && (state.rightEnd == null || tile.canMatch(state.rightEnd))
+                                            if (fitsLeft && !fitsRight) {
+                                                onPlayTile(tile, TilePlacement.LEFT)
+                                            } else if (fitsRight && !fitsLeft) {
+                                                onPlayTile(tile, TilePlacement.RIGHT)
+                                            } else {
+                                                onSelectTile(null)
+                                            }
                                         } else {
                                             onSelectTile(tile)
                                             // If initial board is empty, play immediately
@@ -655,9 +897,10 @@ fun DominoTableView(
                             DominoTileView(
                                 topPips = tile.left,
                                 bottomPips = tile.right,
-                                width = 44.dp,
-                                height = 88.dp,
+                                width = 42.dp,
+                                height = 84.dp,
                                 isHighlighted = isSelected,
+                                canPlayBorder = canPlay && !isSelected,
                                 dimmed = !canPlay && isHumanTurn
                             )
                         }
@@ -678,18 +921,23 @@ private fun OpponentBadge(
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = if (isTurn) color.copy(alpha = 0.2f) else Color(0xFF1E293B).copy(alpha = 0.7f),
+        color = if (isTurn) color.copy(alpha = 0.22f) else Color(0xFF131D2F).copy(alpha = 0.88f),
         border = BorderStroke(
-            width = if (isTurn) 1.5.dp else if (isPartner) 1.2.dp else 1.dp,
-            color = if (isTurn) color else if (isPartner) Color(0xFF38BDF8).copy(alpha = 0.6f) else Color(0xFF334155).copy(alpha = 0.6f)
+            width = if (isTurn) 1.8.dp else if (isPartner) 1.2.dp else 1.dp,
+            color = if (isTurn) color else if (isPartner) Color(0xFF38BDF8).copy(alpha = 0.65f) else Color(0xFF334155).copy(alpha = 0.7f)
         ),
+        shadowElevation = if (isTurn) 4.dp else 2.dp,
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Player name with status icon
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
                 Icon(
                     imageVector = if (isPartner) Icons.Default.Groups else if (player.isBot) Icons.Default.SmartToy else Icons.Default.Person,
                     contentDescription = null,
@@ -700,29 +948,63 @@ private fun OpponentBadge(
                 Text(
                     text = if (isPartner) "${player.name.replace(" (Bot)", "")} (Tu Pareja)" else player.name.replace(" (Bot)", ""),
                     color = Color.White,
-                    fontWeight = if (isTurn || isPartner) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = if (isTurn || isPartner) FontWeight.Bold else FontWeight.SemiBold,
                     fontSize = 11.sp,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.height(3.dp))
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            // Visible Tiles Area: Distinct Ivory Dominos & clear count pill
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // Mini tiles indicator
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    repeat(player.hand.size) {
-                        DominoTileBackView(width = 6.dp, height = 11.dp)
+                // Clear, large, bright ivory domino tiles
+                val tileCount = player.hand.size
+                val tileWidth = when {
+                    tileCount > 6 -> 8.5.dp
+                    tileCount > 4 -> 9.5.dp
+                    else -> 11.dp
+                }
+                val tileHeight = when {
+                    tileCount > 6 -> 15.dp
+                    tileCount > 4 -> 17.dp
+                    else -> 19.dp
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(tileCount) {
+                        DominoTileBackView(
+                            width = tileWidth,
+                            height = tileHeight,
+                            isIvoryStyle = true
+                        )
                     }
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "${player.totalScore}p",
-                    color = DominoGold,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
+
+                Spacer(modifier = Modifier.width(5.dp))
+
+                // Score / Points pill
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF0F172A).copy(alpha = 0.9f),
+                    border = BorderStroke(0.8.dp, DominoGold.copy(alpha = 0.5f))
+                ) {
+                    Text(
+                        text = "${player.totalScore}p",
+                        color = DominoGold,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
             }
         }
     }
@@ -736,6 +1018,19 @@ private fun RoundOverOverlay(
     val isTeamsMode = state.playMode.isTeams && state.players.size == 4
     val team0Score = state.teamScores.getOrElse(0) { 0 }
     val team1Score = state.teamScores.getOrElse(1) { 0 }
+
+    val humanWonRound = state.roundWinnerIndex == 0
+    val humanTeamWonRound = isTeamsMode && (state.roundWinnerIndex == 0 || state.roundWinnerIndex == 2)
+    val humanWonGame = state.winnerPlayerIndex == 0 || (isTeamsMode && (state.winnerPlayerIndex == 0 || state.winnerPlayerIndex == 2))
+
+    val overlayTitle = when {
+        state.status == TableGameStatus.GAME_OVER -> {
+            if (humanWonGame) "¡Ganaste la Partida!" else "¡Partida Terminada!"
+        }
+        humanWonRound -> "¡Ganaste la Ronda!"
+        humanTeamWonRound -> "¡Ganó tu Pareja!"
+        else -> "¡Fin de Ronda!"
+    }
 
     Surface(
         shape = RoundedCornerShape(22.dp),
@@ -767,7 +1062,7 @@ private fun RoundOverOverlay(
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = if (state.status == TableGameStatus.GAME_OVER) "¡Partida Terminada!" else "¡Fin de Ronda!",
+                text = overlayTitle,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -851,3 +1146,734 @@ private fun RoundOverOverlay(
         }
     }
 }
+
+@Composable
+private fun AnimatedPlacedTileView(
+    placedTile: PlacedBoardTile,
+    isNewlyPlaced: Boolean,
+    sourceStartX: Float,
+    sourceStartY: Float,
+    sourceScale: Float,
+    sourceRotation: Float,
+    canPlayLeft: Boolean,
+    canPlayRight: Boolean,
+    onPlayClick: () -> Unit
+) {
+    // Only animate flight from player if this tile was just placed on the board in this turn.
+    // Existing tiles never run the flight animation and start already settled at (0, 0).
+    val shouldAnimateFlight = remember(placedTile.tile.id) { isNewlyPlaced }
+
+    val flyOffsetX = remember(placedTile.tile.id) {
+        Animatable(if (shouldAnimateFlight) sourceStartX else 0f)
+    }
+    val flyOffsetY = remember(placedTile.tile.id) {
+        Animatable(if (shouldAnimateFlight) sourceStartY else 0f)
+    }
+    val flyScale = remember(placedTile.tile.id) {
+        Animatable(if (shouldAnimateFlight) sourceScale else 1f)
+    }
+    val flyAlpha = remember(placedTile.tile.id) {
+        Animatable(if (shouldAnimateFlight) 0.15f else 1f)
+    }
+    val flyRotation = remember(placedTile.tile.id) {
+        Animatable(if (shouldAnimateFlight) sourceRotation else 0f)
+    }
+
+    if (shouldAnimateFlight) {
+        LaunchedEffect(placedTile.tile.id) {
+            launch {
+                flyOffsetX.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 320f)
+                )
+            }
+            launch {
+                flyOffsetY.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 320f)
+                )
+            }
+            launch {
+                flyScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(dampingRatio = 0.76f, stiffness = 340f)
+                )
+            }
+            launch {
+                flyAlpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+                )
+            }
+            launch {
+                flyRotation.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 320f)
+                )
+            }
+        }
+    }
+
+    // Base position for tiles on table:
+    // If table coordinates shift when adding a tile on the left branch,
+    // existing tiles slide smoothly to their new normalized base without any flight or jump
+    val animBaseX by animateFloatAsState(
+        targetValue = placedTile.x,
+        animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
+        label = "tile_x_${placedTile.tile.id}"
+    )
+    val animBaseY by animateFloatAsState(
+        targetValue = placedTile.y,
+        animationSpec = spring(dampingRatio = 0.85f, stiffness = 380f),
+        label = "tile_y_${placedTile.tile.id}"
+    )
+
+    val isInFlight = shouldAnimateFlight && (flyOffsetX.value != 0f || flyOffsetY.value != 0f)
+
+    Box(
+        modifier = Modifier
+            .offset(
+                x = (animBaseX + flyOffsetX.value).dp,
+                y = (animBaseY + flyOffsetY.value).dp
+            )
+            .size(placedTile.width.dp, placedTile.height.dp)
+            .zIndex(if (isInFlight || isNewlyPlaced) 20f else 1f)
+            .graphicsLayer {
+                alpha = flyAlpha.value
+                scaleX = flyScale.value
+                scaleY = flyScale.value
+                rotationZ = flyRotation.value
+                shadowElevation = if (isInFlight) 16f else 2f
+            }
+            .then(
+                if (canPlayLeft || canPlayRight) {
+                    Modifier.clickable { onPlayClick() }
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        if (placedTile.isVertical) {
+            DominoTileView(
+                topPips = placedTile.topOrLeftPips,
+                bottomPips = placedTile.bottomOrRightPips,
+                width = placedTile.width.dp,
+                height = placedTile.height.dp,
+                isHighlighted = canPlayLeft || canPlayRight
+            )
+        } else {
+            HorizontalDominoTileView(
+                leftPips = placedTile.topOrLeftPips,
+                rightPips = placedTile.bottomOrRightPips,
+                width = placedTile.width.dp,
+                height = placedTile.height.dp,
+                isHighlighted = canPlayLeft || canPlayRight
+            )
+        }
+    }
+}
+
+@Composable
+fun DominoRoomWaitingView(
+    state: DominoTableState,
+    onStartGame: () -> Unit,
+    onAddGuest: (String) -> Unit,
+    onRemoveGuest: (Int) -> Unit,
+    onFillBotsAndStart: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var showAddGuestDialog by remember { mutableStateOf(false) }
+    var guestNameInput by remember { mutableStateOf("") }
+    var codeCopied by remember { mutableStateOf(false) }
+
+    val requiredCount = state.targetPlayerCount
+    val currentCount = state.players.size
+    val isRoomFull = currentCount >= requiredCount
+    val code = state.roomCode ?: "DOM"
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0B132B),
+                        Color(0xFF091024),
+                        Color(0xFF020617)
+                    )
+                )
+            )
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        // TOP: Header Bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = DominoGold.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, DominoGold.copy(alpha = 0.6f)),
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Groups,
+                            contentDescription = null,
+                            tint = DominoGold,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "SALA DE INVITADOS",
+                        color = DominoGold,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp
+                    )
+                    Text(
+                        text = "Partida de $requiredCount Jugadores" +
+                                if (state.playMode.isTeams && requiredCount == 4) " • Parejas (2 vs 2)" else " • Individual",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = onCancel,
+                modifier = Modifier.testTag("btn_close_waiting_room")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Salir de la Sala",
+                    tint = Color(0xFF94A3B8)
+                )
+            }
+        }
+
+        // MIDDLE SCROLLABLE CONTENT: Code Card, Status, and Seats
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(vertical = 12.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Room Code Display Hero Card
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xFF1E293B).copy(alpha = 0.85f),
+                border = BorderStroke(1.5.dp, DominoGold.copy(alpha = 0.8f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "CÓDIGO DE LA SALA",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = code,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 4.sp,
+                        color = DominoGold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Comparte este código para que tus invitados se unan desde la app",
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Copy Button
+                        OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("Código de Sala", code)
+                                clipboard.setPrimaryClip(clip)
+                                codeCopied = true
+                                Toast.makeText(context, "Código $code copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, DominoGold.copy(alpha = 0.7f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(42.dp)
+                                .testTag("btn_copy_room_code")
+                        ) {
+                            Icon(
+                                imageVector = if (codeCopied) Icons.Default.CheckCircle else Icons.Default.ContentCopy,
+                                contentDescription = null,
+                                tint = DominoGold,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (codeCopied) "¡Copiado!" else "Copiar Código",
+                                color = DominoGold,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Share Button
+                        Button(
+                            onClick = {
+                                val sendIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(
+                                        Intent.EXTRA_TEXT,
+                                        "¡Únete a mi partida de dominó! Abre la app e ingresa el código de sala: $code"
+                                    )
+                                    type = "text/plain"
+                                }
+                                val shareIntent = Intent.createChooser(sendIntent, "Compartir código de sala")
+                                context.startActivity(shareIntent)
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DominoGold),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(42.dp)
+                                .testTag("btn_share_room_code")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Compartir",
+                                color = Color.Black,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Progress Banner
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (isRoomFull) Color(0xFF064E3B).copy(alpha = 0.7f) else Color(0xFF1E293B).copy(alpha = 0.6f),
+                border = BorderStroke(
+                    1.dp,
+                    if (isRoomFull) Color(0xFF10B981) else Color(0xFF334155)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Participantes Conectados",
+                            color = Color(0xFFE2E8F0),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isRoomFull) Color(0xFF10B981) else DominoGold,
+                            modifier = Modifier.padding(start = 4.dp)
+                        ) {
+                            Text(
+                                text = "$currentCount de $requiredCount",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LinearProgressIndicator(
+                        progress = { (currentCount.toFloat() / requiredCount.toFloat()).coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = if (isRoomFull) Color(0xFF10B981) else DominoGold,
+                        trackColor = Color.White.copy(alpha = 0.1f)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = if (isRoomFull)
+                            "¡Todos los participantes han entrado! Ya puedes iniciar la mano."
+                        else
+                            "Esperando a que entren ${requiredCount - currentCount} participante(s) más con el código para iniciar la mano.",
+                        color = if (isRoomFull) Color(0xFF6EE7B7) else Color(0xFF94A3B8),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Player Slots
+            Text(
+                text = "ASIENTOS DE LA MESA",
+                color = Color(0xFF94A3B8),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp)
+            )
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                for (seatIndex in 0 until requiredCount) {
+                    val player = state.players.getOrNull(seatIndex)
+                    if (player != null) {
+                        // Occupied Seat
+                        val isHost = seatIndex == 0
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1E293B).copy(alpha = 0.9f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isHost) DominoGold.copy(alpha = 0.8f) else Color(0xFF10B981).copy(alpha = 0.7f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = PlayerColors.getOrElse(seatIndex) { Color(0xFF38BDF8) },
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = player.name.firstOrNull()?.uppercase() ?: "J",
+                                                color = Color.Black,
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column {
+                                        Text(
+                                            text = player.name,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            text = if (isHost) "Anfitrión de la sala" else "Invitado con código",
+                                            color = if (isHost) DominoGold else Color(0xFF38BDF8),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFF10B981).copy(alpha = 0.2f),
+                                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f))
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = Color(0xFF34D399),
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Listo",
+                                                color = Color(0xFF34D399),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+
+                                    if (!isHost) {
+                                        IconButton(
+                                            onClick = { onRemoveGuest(seatIndex) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Remover",
+                                                tint = Color(0xFFEF4444).copy(alpha = 0.7f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Empty Seat Waiting
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF0F172A).copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color(0xFF334155).copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color.White.copy(alpha = 0.05f),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Default.HourglassEmpty,
+                                                contentDescription = null,
+                                                tint = Color(0xFF64748B),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column {
+                                        Text(
+                                            text = "Asiento #${seatIndex + 1}: Esperando invitado...",
+                                            color = Color(0xFF94A3B8),
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            text = "Ingresar usando código $code",
+                                            color = Color(0xFF64748B),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "Pendiente",
+                                    color = Color(0xFF64748B),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // BOTTOM ACTIONS
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (isRoomFull) {
+                // All players ready - Host can start!
+                Button(
+                    onClick = onStartGame,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DominoGold),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .testTag("btn_start_friends_match")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "¡INICIAR PARTIDA Y REPARTIR!",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 15.sp
+                    )
+                }
+            } else {
+                // Not full yet - Options to add guest with code or complete with bots
+                Button(
+                    onClick = {
+                        guestNameInput = "Invitado ${currentCount + 1}"
+                        showAddGuestDialog = true
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("btn_simulate_guest_join")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PersonAdd,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Ingresar Invitado con Código",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onFillBotsAndStart,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, DominoGold.copy(alpha = 0.7f)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .testTag("btn_fill_bots_and_start")
+                    ) {
+                        Text(
+                            text = "Completar con Bots",
+                            color = DominoGold,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = onCancel,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFF64748B)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .testTag("btn_cancel_room")
+                    ) {
+                        Text(
+                            text = "Cancelar Sala",
+                            color = Color(0xFF94A3B8),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Dialog to add guest
+    if (showAddGuestDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddGuestDialog = false },
+            title = {
+                Text(
+                    text = "Unirse a la Sala con Código",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Ingresando a la sala con código: $code",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = guestNameInput,
+                        onValueChange = { guestNameInput = it },
+                        label = { Text("Nombre del invitado") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val name = guestNameInput.ifBlank { "Invitado ${currentCount + 1}" }
+                        onAddGuest(name)
+                        showAddGuestDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DominoGold)
+                ) {
+                    Text("Ingresar a la Sala", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddGuestDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+}
+

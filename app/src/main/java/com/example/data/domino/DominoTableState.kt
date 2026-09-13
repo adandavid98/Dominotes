@@ -42,5 +42,10 @@ data class DominoTableState(
     val roomCode: String? = null,
     val initialTileId: Int? = null,
     val playMode: DominoGamePlayMode = DominoGamePlayMode.PAREJAS_2V2,
-    val teamScores: List<Int> = listOf(0, 0) // Team 0 and Team 1 scores
+    val teamScores: List<Int> = listOf(0, 0), // Team 0 and Team 1 scores
+    val targetPlayerCount: Int = 4,
+    val isWaitingForGuests: Boolean = false,
+    val lastPlayedTile: DominoTile? = null,
+    val lastPlayedByPlayerName: String? = null,
+    val lastPlayedByPlayerIndex: Int? = null
 )

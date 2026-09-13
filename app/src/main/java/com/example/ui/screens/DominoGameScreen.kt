@@ -53,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
@@ -365,6 +366,11 @@ fun DominoGameScreen(
                     onDrawTile = { viewModel.drawHumanTile() },
                     onPassTurn = { viewModel.passHumanTurn() },
                     onNextRound = { viewModel.nextTableRound() },
+                    onStartWaitingGame = { viewModel.startWaitingRoomGame() },
+                    onAddGuest = { viewModel.addGuestWithCode(it) },
+                    onRemoveGuest = { viewModel.removePlayerFromWaitingRoom(it) },
+                    onFillBotsAndStart = { viewModel.fillRemainingSlotsWithBotsAndStart() },
+                    onCancelWaitingRoom = { viewModel.cancelWaitingRoom() },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
@@ -457,6 +463,45 @@ fun DominoGameScreen(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // Action Bar with direct "Nueva Partida" button for both "Por Rondas" and "Acumulación Total"
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = { viewModel.setShowNewGameDialog(true) },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("btn_scorer_new_game")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PostAdd,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Nueva Partida",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+
+                    if (state.rounds.isNotEmpty()) {
+                        Text(
+                            text = "Ronda #${state.rounds.size + 1}",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // Score Cards Grid (2 to 4 players/teams)
                 val chunkedPlayers = state.playerNames.indices.chunked(2)
@@ -597,9 +642,9 @@ fun DominoGameScreen(
         FriendsRoomDialog(
             currentRoomCode = tableState.roomCode,
             userDisplayName = currentUser?.displayName ?: "Tú",
-            initialPlayerCount = tableState.players.size,
+            initialPlayerCount = tableState.targetPlayerCount,
             onCreateRoom = { code, count -> viewModel.createFriendsRoom(code, count) },
-            onJoinRoom = { code -> viewModel.joinFriendsRoom(code) },
+            onJoinRoom = { code, guestName -> viewModel.joinFriendsRoom(code, guestName ?: "Invitado") },
             onDismiss = { viewModel.setShowFriendsDialog(false) }
         )
     }

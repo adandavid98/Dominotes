@@ -21,43 +21,74 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun DominoTileBackView(
     modifier: Modifier = Modifier,
-    width: Dp = 28.dp,
-    height: Dp = 48.dp
+    width: Dp = 10.dp,
+    height: Dp = 18.dp,
+    borderColor: Color = Color(0xFFE2E8F0),
+    isIvoryStyle: Boolean = true
 ) {
-    val corner = 5.dp
+    val corner = (width * 0.22f).coerceIn(2.dp, 4.dp)
     Box(
         modifier = modifier
             .size(width, height)
-            .shadow(elevation = 3.dp, shape = RoundedCornerShape(corner))
+            .shadow(elevation = 2.dp, shape = RoundedCornerShape(corner))
             .clip(RoundedCornerShape(corner))
             .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFF1E293B), // Slate 800
-                        Color(0xFF0F172A), // Slate 900
-                        Color(0xFF020617)  // Deep slate
+                if (isIvoryStyle) {
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFFFFFFF),
+                            Color(0xFFF1F5F9),
+                            Color(0xFFE2E8F0)
+                        )
                     )
-                )
+                } else {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF1E293B),
+                            Color(0xFF0F172A),
+                            Color(0xFF020617)
+                        )
+                    )
+                }
             )
-            .border(0.8.dp, Color(0xFF38BDF8).copy(alpha = 0.35f), RoundedCornerShape(corner)),
+            .border(
+                width = 1.dp,
+                color = if (isIvoryStyle) Color(0xFFCBD5E1) else borderColor.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(corner)
+            ),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize(0.78f)) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
-            // Minimalist diamond ornament
+            val midY = h / 2f
+
+            // Central divider line (just like a real domino)
+            drawLine(
+                color = if (isIvoryStyle) Color(0xFF94A3B8) else Color(0xFF38BDF8).copy(alpha = 0.5f),
+                start = Offset(w * 0.15f, midY),
+                end = Offset(w * 0.85f, midY),
+                strokeWidth = if (h > 14.dp.toPx()) 1.2f else 0.9f
+            )
+
+            // Center brass pin / rivet detail
+            val pinRadius = (w * 0.12f).coerceIn(1f, 2.2f)
             drawCircle(
-                color = Color(0xFF38BDF8).copy(alpha = 0.4f),
-                radius = 2.5f,
-                center = Offset(w / 2f, h / 2f)
+                color = if (isIvoryStyle) Color(0xFFD97706) else Color(0xFF38BDF8),
+                radius = pinRadius,
+                center = Offset(w / 2f, midY)
             )
-            // Sleek concentric subtle border
-            drawRect(
-                color = Color(0xFF94A3B8).copy(alpha = 0.2f),
-                topLeft = Offset(1f, 1f),
-                size = androidx.compose.ui.geometry.Size(w - 2f, h - 2f),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f)
-            )
+
+            // Inner subtle border framing
+            if (w >= 8.dp.toPx()) {
+                drawRoundRect(
+                    color = if (isIvoryStyle) Color(0x22000000) else Color(0x3338BDF8),
+                    topLeft = Offset(1.5f, 1.5f),
+                    size = androidx.compose.ui.geometry.Size(w - 3f, h - 3f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 0.8f)
+                )
+            }
         }
     }
 }

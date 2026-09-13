@@ -30,7 +30,8 @@ fun DominoTileView(
     dotColor: Color = Color(0xFF0F172A),
     backgroundColor: Color = Color(0xFFFFFFFF),
     isHighlighted: Boolean = false,
-    dimmed: Boolean = false
+    dimmed: Boolean = false,
+    canPlayBorder: Boolean = false
 ) {
     // Proportional, elegant corner radius (scaled with width)
     val cornerRadius = (width * 0.13f).coerceIn(3.dp, 8.dp)
@@ -39,10 +40,10 @@ fun DominoTileView(
         modifier = modifier
             .size(width, height)
             .shadow(
-                elevation = if (isHighlighted) 8.dp else 4.dp,
+                elevation = if (isHighlighted) 10.dp else if (canPlayBorder) 6.dp else 4.dp,
                 shape = RoundedCornerShape(cornerRadius),
-                ambientColor = if (isHighlighted) Color(0xFF38BDF8) else Color(0x66000000),
-                spotColor = if (isHighlighted) Color(0xFF0284C7) else Color(0x40000000)
+                ambientColor = if (isHighlighted) Color(0xFF38BDF8) else if (canPlayBorder) Color(0xFF10B981) else Color(0x66000000),
+                spotColor = if (isHighlighted) Color(0xFF0284C7) else if (canPlayBorder) Color(0xFF059669) else Color(0x40000000)
             )
             .clip(RoundedCornerShape(cornerRadius))
             .background(
@@ -51,6 +52,10 @@ fun DominoTileView(
                         Color(0xFFFFFFFF),
                         Color(0xFFE0F2FE),
                         Color(0xFFBAE6FD)
+                    ) else if (canPlayBorder) listOf(
+                        Color(0xFFFFFFFF),
+                        Color(0xFFF0FDF4),
+                        Color(0xFFDCFCE7)
                     ) else if (dimmed) listOf(
                         Color(0xFFE2E8F0),
                         Color(0xFFCBD5E1)
@@ -64,8 +69,8 @@ fun DominoTileView(
                 )
             )
             .border(
-                width = if (isHighlighted) 2.dp else 1.2.dp,
-                color = if (isHighlighted) Color(0xFF0284C7) else Color(0xFF94A3B8).copy(alpha = 0.6f),
+                width = if (isHighlighted) 2.4.dp else if (canPlayBorder) 2.2.dp else 1.2.dp,
+                color = if (isHighlighted) Color(0xFF0284C7) else if (canPlayBorder) Color(0xFF10B981) else Color(0xFF94A3B8).copy(alpha = 0.6f),
                 shape = RoundedCornerShape(cornerRadius)
             ),
         contentAlignment = Alignment.Center
