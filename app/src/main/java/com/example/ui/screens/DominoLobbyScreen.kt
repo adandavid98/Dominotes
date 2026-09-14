@@ -117,7 +117,7 @@ fun DominoLobbyScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Lobby de Juego",
+                            text = "Lobby: Bienvenido!",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Black,
                             color = Color.White

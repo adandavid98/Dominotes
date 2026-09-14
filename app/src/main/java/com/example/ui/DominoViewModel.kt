@@ -435,9 +435,9 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     // Google Auth actions
-    fun signInGoogle(email: String, displayName: String) {
-        val uid = "google_" + email.hashCode()
-        val user = AuthUser(uid = uid, email = email, displayName = displayName)
+    fun signInGoogle(email: String, displayName: String, photoUrl: String? = null) {
+        val uid = "google_" + (if (email.isNotBlank()) email.hashCode() else System.currentTimeMillis())
+        val user = AuthUser(uid = uid, email = email, displayName = displayName, photoUrl = photoUrl)
         authRepository.signIn(user)
         _gameState.update { it.copy(showAuthDialog = false) }
 

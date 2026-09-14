@@ -631,7 +631,7 @@ fun DominoGameScreen(
     if (state.showAuthDialog) {
         GoogleAccountDialog(
             currentUser = currentUser,
-            onSignIn = { email, name -> viewModel.signInGoogle(email, name) },
+            onSignIn = { email, name, photoUrl -> viewModel.signInGoogle(email, name, photoUrl) },
             onSignOut = { viewModel.signOutGoogle() },
             onUpdateName = { viewModel.updatePlayerDisplayName(it) },
             onDismiss = { viewModel.setShowAuthDialog(false) }
