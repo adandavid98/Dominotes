@@ -3,6 +3,7 @@ package com.example.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.BuildConfig
 import com.example.data.auth.AuthRepository
 import com.example.data.auth.AuthUser
 import com.example.data.domino.DominoEngine
@@ -18,6 +19,8 @@ import com.example.data.model.BonusTag
 import com.example.data.model.GameMode
 import com.example.data.model.ScoringDisplayMode
 import com.example.data.repository.DominoRepository
+import com.example.data.update.AppUpdateChecker
+import com.example.data.update.UpdateInfo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -78,6 +81,11 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
 
     val matchHistory: StateFlow<List<MatchEntity>>
 
+    // In-App Updater for GitHub releases
+    private val updateChecker = AppUpdateChecker(application)
+    private val _availableUpdate = MutableStateFlow<UpdateInfo?>(null)
+    val availableUpdate: StateFlow<UpdateInfo?> = _availableUpdate.asStateFlow()
+
     init {
         val dao = DominoDatabase.getDatabase(application).dominoDao()
         repository = DominoRepository(dao)
@@ -94,6 +102,30 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
             target = 100,
             names = listOf("Nosotros", "Ellos")
         )
+
+        // Check for updates in background when app opens with internet
+        checkForAppUpdates()
+    }
+
+    fun checkForAppUpdates() {
+        viewModelScope.launch {
+            try {
+                val update = updateChecker.checkForUpdates(BuildConfig.BUILD_TIMESTAMP)
+                if (update != null && update.hasUpdate) {
+                    _availableUpdate.value = update
+                }
+            } catch (e: Exception) {
+                // Silently ignore if offline
+            }
+        }
+    }
+
+    fun downloadUpdate(url: String) {
+        updateChecker.openDownloadUrl(url)
+    }
+
+    fun dismissUpdateBanner() {
+        _availableUpdate.value = null
     }
 
     fun setDisplayMode(mode: ScoringDisplayMode) {

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Games
 import androidx.compose.material.icons.filled.Groups
@@ -104,6 +105,7 @@ fun DominoGameScreen(
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val tableState by viewModel.tableState.collectAsStateWithLifecycle()
     val selectedTile by viewModel.selectedTile.collectAsStateWithLifecycle()
+    val availableUpdate by viewModel.availableUpdate.collectAsStateWithLifecycle()
 
     val highestScore = state.scores.maxOrNull() ?: 0
 
@@ -352,6 +354,9 @@ fun DominoGameScreen(
                     onEditProfile = { viewModel.setShowAuthDialog(true) },
                     hasActiveGame = tableState.boardTiles.isNotEmpty() || tableState.players.any { it.totalScore > 0 },
                     onResumeGame = { viewModel.setInTableLobby(false) },
+                    availableUpdate = availableUpdate,
+                    onUpdateClick = { url -> viewModel.downloadUpdate(url) },
+                    onDismissUpdate = { viewModel.dismissUpdateBanner() },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
@@ -385,6 +390,45 @@ fun DominoGameScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
+                // In-App Update Notice for Scorer Screen
+                if (availableUpdate != null && availableUpdate!!.hasUpdate) {
+                    Surface(
+                        onClick = { viewModel.downloadUpdate(availableUpdate!!.downloadUrl) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF1E3A8A),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.CloudDownload,
+                                    contentDescription = null,
+                                    tint = Color(0xFF93C5FD),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Nueva versión disponible",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "Actualizar",
+                                color = Color(0xFF93C5FD),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
                 // Mode Switcher: "Por Rondas" vs "Acumulación Total"
                 Surface(
                     shape = RoundedCornerShape(14.dp),
