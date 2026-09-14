@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -216,21 +217,22 @@ fun DominoTableView(
         label = "pulse_alpha"
     )
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0F172A), // Slate 900
-                        Color(0xFF0A0F1D), // Dark slate
-                        Color(0xFF020617)  // Deep background
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF0F172A), // Slate 900
+                            Color(0xFF0A0F1D), // Dark slate
+                            Color(0xFF020617)  // Deep background
+                        )
                     )
                 )
-            )
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
         // TOP: Opponents Status Bar
         val isTeamsMode = state.playMode.isTeams && state.players.size == 4
 
@@ -521,14 +523,6 @@ fun DominoTableView(
                             }
                         }
                     }
-                }
-
-                // Round / Game Over Overlay Dialog
-                if (state.status == TableGameStatus.ROUND_OVER || state.status == TableGameStatus.GAME_OVER) {
-                    RoundOverOverlay(
-                        state = state,
-                        onNextRound = onNextRound
-                    )
                 }
             }
         }
@@ -853,6 +847,29 @@ fun DominoTableView(
                     }
                 }
 
+                if (state.status == TableGameStatus.ROUND_OVER || state.status == TableGameStatus.GAME_OVER) {
+                    Button(
+                        onClick = onNextRound,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .padding(vertical = 2.dp)
+                            .testTag("btn_next_round_bottom")
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (state.status == TableGameStatus.GAME_OVER) "Nueva Partida" else "Siguiente Ronda",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
                 // Human Tiles in Hand with Enhanced Ceramic Visuals & Highlight
                 Row(
                     modifier = Modifier
@@ -909,6 +926,23 @@ fun DominoTableView(
             }
         }
     }
+
+    // Modal Round / Game Over Overlay Dialog over full table view
+    if (state.status == TableGameStatus.ROUND_OVER || state.status == TableGameStatus.GAME_OVER) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.72f))
+                .clickable(enabled = false) {},
+            contentAlignment = Alignment.Center
+        ) {
+            RoundOverOverlay(
+                state = state,
+                onNextRound = onNextRound
+            )
+        }
+    }
+}
 }
 
 @Composable
@@ -1034,15 +1068,18 @@ private fun RoundOverOverlay(
 
     Surface(
         shape = RoundedCornerShape(22.dp),
-        color = Color(0xFF0F172A).copy(alpha = 0.96f),
+        color = Color(0xFF0F172A).copy(alpha = 0.98f),
         border = BorderStroke(1.5.dp, DominoGold.copy(alpha = 0.8f)),
-        shadowElevation = 12.dp,
+        shadowElevation = 16.dp,
         modifier = Modifier
             .padding(16.dp)
             .fillMaxWidth(0.92f)
+            .heightIn(max = 580.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier
+                .padding(20.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(

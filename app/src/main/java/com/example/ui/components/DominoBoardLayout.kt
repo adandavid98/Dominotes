@@ -87,6 +87,7 @@ fun calculateDominoSnakeLayout(
         var countInPhase = 0
         var colX = 0f
         var colBottomY = 0f
+        var lastTileWasDouble = openerIsVertical
 
         for (idx in (openerIndex + 1) until boardTiles.size) {
             val tile = boardTiles[idx]
@@ -94,9 +95,10 @@ fun calculateDominoSnakeLayout(
             if (phase == 0 && countInPhase >= maxTilesInRow) {
                 phase = 1
                 countInPhase = 0
-                // Connect directly under the right end of the last horizontal tile
+                // Connect directly under the right end of the last horizontal tile,
+                // accounting for crosswise vertical extent if the corner tile is a double.
                 colX = curX - wShort
-                colBottomY = wShort
+                colBottomY = if (lastTileWasDouble) wShort + (wLong - wShort) / 2f else wShort
             }
 
             when (phase) {
@@ -124,8 +126,13 @@ fun calculateDominoSnakeLayout(
                     if (countInPhase >= maxTilesInColumn) {
                         phase = 2
                         countInPhase = 0
-                        curX = colX
-                        curY = colBottomY
+                        if (lastTileWasDouble) {
+                            curX = colX - (wLong - wShort) / 2f
+                            curY = colBottomY - wShort
+                        } else {
+                            curX = colX
+                            curY = colBottomY - wShort
+                        }
                     }
 
                     if (phase == 1) {
@@ -187,6 +194,7 @@ fun calculateDominoSnakeLayout(
                     countInPhase++
                 }
             }
+            lastTileWasDouble = tile.isDouble
         }
     }
 
@@ -199,6 +207,7 @@ fun calculateDominoSnakeLayout(
         var countInPhase = 0
         var colX = 0f
         var colTopY = 0f
+        var lastTileWasDouble = openerIsVertical
 
         for (idx in (openerIndex - 1) downTo 0) {
             val tile = boardTiles[idx]
@@ -206,9 +215,10 @@ fun calculateDominoSnakeLayout(
             if (phase == 0 && countInPhase >= maxTilesInRow) {
                 phase = 1
                 countInPhase = 0
-                // Connect directly on top of the left end of the leftmost horizontal tile
+                // Connect directly on top of the left end of the leftmost horizontal tile,
+                // accounting for crosswise vertical extent if the corner tile is a double.
                 colX = curX
-                colTopY = 0f
+                colTopY = if (lastTileWasDouble) -(wLong - wShort) / 2f else 0f
             }
 
             when (phase) {
@@ -236,8 +246,13 @@ fun calculateDominoSnakeLayout(
                     if (countInPhase >= maxTilesInColumn) {
                         phase = 2
                         countInPhase = 0
-                        curX = colX + wShort
-                        curY = colTopY - wShort
+                        if (lastTileWasDouble) {
+                            curX = colX - (wLong - wShort) / 2f + wLong
+                            curY = colTopY
+                        } else {
+                            curX = colX + wShort
+                            curY = colTopY
+                        }
                     }
 
                     if (phase == 1) {
@@ -299,6 +314,7 @@ fun calculateDominoSnakeLayout(
                     countInPhase++
                 }
             }
+            lastTileWasDouble = tile.isDouble
         }
     }
 

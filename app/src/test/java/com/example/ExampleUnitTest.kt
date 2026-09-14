@@ -50,6 +50,27 @@ class ExampleUnitTest {
   }
 
   @Test
+  fun testNoTilesOverlapInSnakeLayout() {
+    val opener = DominoTile(5, 5, 55)
+    val left1 = DominoTile(2, 5, 25)
+    val left2 = DominoTile(6, 2, 62)
+    val left3Double = DominoTile(6, 6, 66)
+    val left4 = DominoTile(1, 6, 16)
+    val boardA = listOf(left4, left3Double, left2, left1, opener)
+    val layoutA = calculateDominoSnakeLayout(boardA, initialTileId = opener.id, maxTilesInRow = 3)
+
+    for (i in layoutA.tiles.indices) {
+      val t1 = layoutA.tiles[i]
+      for (j in i + 1 until layoutA.tiles.size) {
+        val t2 = layoutA.tiles[j]
+        val overlapX = maxOf(0f, minOf(t1.x + t1.width, t2.x + t2.width) - maxOf(t1.x, t2.x))
+        val overlapY = maxOf(0f, minOf(t1.y + t1.height, t2.y + t2.height) - maxOf(t1.y, t2.y))
+        assertTrue("Tiles ${t1.tile} and ${t2.tile} overlap! overlapX=$overlapX, overlapY=$overlapY", overlapX < 0.5f || overlapY < 0.5f)
+      }
+    }
+  }
+
+  @Test
   fun testTeamMode_2vs2_SetupAndScoring() {
     val state = com.example.data.domino.DominoEngine.startNewMatch(
       humanPlayerName = "Yo",
@@ -157,5 +178,49 @@ class ExampleUnitTest {
 
     // Player with [4|5] cannot play on ends 0 and 1
     assertFalse("Player with [4|5] cannot play on ends 0 and 1", com.example.data.domino.DominoEngine.canPlayerPlay(playerWithoutPlayable, state))
+  }
+
+  @Test
+  fun testWinnerStartsNextRoundWithAnyTile() {
+    val players = listOf(
+      com.example.data.domino.DominoPlayer(id = "p0", name = "Tú", isBot = false),
+      com.example.data.domino.DominoPlayer(id = "p1", name = "Carlos", isBot = true),
+      com.example.data.domino.DominoPlayer(id = "p2", name = "María", isBot = true),
+      com.example.data.domino.DominoPlayer(id = "p3", name = "Luis", isBot = true)
+    )
+
+    // Suppose player 2 (María) won the previous round
+    val state = com.example.data.domino.DominoEngine.dealRound(
+      players = players,
+      targetScore = 100,
+      starterPlayerIndex = 2
+    )
+
+    // Turn must start with María
+    assertEquals(2, state.currentTurnIndex)
+    assertTrue(state.boardTiles.isEmpty())
+    assertTrue(state.lastActionLog.contains("María"))
+    assertTrue(state.lastActionLog.contains("ganó la mano anterior"))
+
+    // Starter can play ANY tile from their hand even if not a double
+    val starterPlayer = state.players[2]
+    assertEquals(7, starterPlayer.hand.size)
+    for (tile in starterPlayer.hand) {
+      val placements = com.example.data.domino.DominoEngine.getPlayablePlacements(tile, state)
+      assertTrue("Any tile must be playable when board is empty", placements.isNotEmpty())
+    }
+
+    // Play a tile to open the board
+    val firstTile = starterPlayer.hand.first()
+    val stateAfterOpen = com.example.data.domino.DominoEngine.playTile(
+      state = state,
+      playerIndex = 2,
+      tile = firstTile,
+      placement = com.example.data.domino.TilePlacement.LEFT
+    )
+    assertEquals(1, stateAfterOpen.boardTiles.size)
+    assertEquals(firstTile.left, stateAfterOpen.leftEnd)
+    assertEquals(firstTile.right, stateAfterOpen.rightEnd)
+    assertEquals(3, stateAfterOpen.currentTurnIndex)
   }
 }

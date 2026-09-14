@@ -11,7 +11,6 @@ object DominoEngine {
         roomCode: String? = null,
         playMode: DominoGamePlayMode = if (botCount == 3) DominoGamePlayMode.PAREJAS_2V2 else DominoGamePlayMode.INDIVIDUAL
     ): DominoTableState {
-        val allTiles = DominoTile.createDoubleSixSet().shuffled(Random(System.currentTimeMillis()))
         val totalPlayers = 1 + botCount
         val tilesPerPlayer = 7
 
@@ -65,9 +64,10 @@ object DominoEngine {
         targetScore: Int,
         roomCode: String? = null,
         playMode: DominoGamePlayMode = DominoGamePlayMode.PAREJAS_2V2,
-        teamScores: List<Int> = listOf(0, 0)
+        teamScores: List<Int> = listOf(0, 0),
+        starterPlayerIndex: Int? = null
     ): DominoTableState {
-        val allTiles = DominoTile.createDoubleSixSet().shuffled(Random(System.currentTimeMillis()))
+        val allTiles = DominoTile.createDoubleSixSet().shuffled(Random.Default)
         var deckIndex = 0
         val tilesPerPlayer = 7
 
@@ -83,34 +83,47 @@ object DominoEngine {
             emptyList()
         }
 
-        // Determine starting player: highest double or highest tile
-        var starterIndex = 0
-        var bestDouble = -1
-        for (i in updatedPlayers.indices) {
-            val doubles = updatedPlayers[i].hand.filter { it.isDouble }.map { it.left }
-            val maxD = doubles.maxOrNull() ?: -1
-            if (maxD > bestDouble) {
-                bestDouble = maxD
-                starterIndex = i
-            }
-        }
+        // Determine starting player:
+        // If a winner from the previous round is specified (starterPlayerIndex), that player has the right
+        // to open the hand first with ANY tile (whether double or not).
+        // For the first hand of a match, the player with the highest double (or highest tile) opens.
+        val starterIndex: Int
+        val starterMsg: String
 
-        if (bestDouble == -1) {
-            var highestPoints = -1
+        if (starterPlayerIndex != null && starterPlayerIndex in updatedPlayers.indices) {
+            starterIndex = starterPlayerIndex
+            val startingPlayer = updatedPlayers[starterIndex]
+            starterMsg = "${startingPlayer.name} ganó la mano anterior y abre la mesa con cualquier ficha"
+        } else {
+            var bestIdx = 0
+            var bestDouble = -1
             for (i in updatedPlayers.indices) {
-                val maxP = updatedPlayers[i].hand.maxOfOrNull { it.totalPoints } ?: 0
-                if (maxP > highestPoints) {
-                    highestPoints = maxP
-                    starterIndex = i
+                val doubles = updatedPlayers[i].hand.filter { it.isDouble }.map { it.left }
+                val maxD = doubles.maxOrNull() ?: -1
+                if (maxD > bestDouble) {
+                    bestDouble = maxD
+                    bestIdx = i
                 }
             }
-        }
 
-        val startingPlayer = updatedPlayers[starterIndex]
-        val starterMsg = if (bestDouble >= 0) {
-            "${startingPlayer.name} sale con el doble [$bestDouble|$bestDouble]"
-        } else {
-            "${startingPlayer.name} tiene la salida inicial"
+            if (bestDouble == -1) {
+                var highestPoints = -1
+                for (i in updatedPlayers.indices) {
+                    val maxP = updatedPlayers[i].hand.maxOfOrNull { it.totalPoints } ?: 0
+                    if (maxP > highestPoints) {
+                        highestPoints = maxP
+                        bestIdx = i
+                    }
+                }
+            }
+
+            starterIndex = bestIdx
+            val startingPlayer = updatedPlayers[starterIndex]
+            starterMsg = if (bestDouble >= 0) {
+                "${startingPlayer.name} abre la primera mano con el doble [$bestDouble|$bestDouble]"
+            } else {
+                "${startingPlayer.name} tiene la salida inicial"
+            }
         }
 
         return DominoTableState(

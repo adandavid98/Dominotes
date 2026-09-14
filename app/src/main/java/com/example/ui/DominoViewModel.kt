@@ -537,12 +537,14 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
                 playMode = current.playMode
             )
         } else {
+            val nextStarter = current.roundWinnerIndex
             _tableState.value = DominoEngine.dealRound(
                 players = current.players,
                 targetScore = current.targetScore,
                 roomCode = current.roomCode,
                 playMode = current.playMode,
-                teamScores = current.teamScores
+                teamScores = current.teamScores,
+                starterPlayerIndex = nextStarter
             )
             _selectedTile.value = null
             checkTriggerBotTurns()
