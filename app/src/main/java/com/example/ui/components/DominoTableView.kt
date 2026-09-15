@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1344,7 +1345,7 @@ fun DominoRoomWaitingView(
     val isRoomFull = currentCount >= requiredCount
     val code = state.roomCode ?: "DOM"
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(
@@ -1356,79 +1357,83 @@ fun DominoRoomWaitingView(
                     )
                 )
             )
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // TOP: Header Bar
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // SCROLLABLE BODY (Fits comfortably without scrolling on normal screens, but scrolls if screen is very short)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = if (isRoomFull) 82.dp else 126.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .widthIn(max = 580.dp)
+                .align(Alignment.TopCenter),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = CircleShape,
-                    color = DominoGold.copy(alpha = 0.15f),
-                    border = BorderStroke(1.dp, DominoGold.copy(alpha = 0.6f)),
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Groups,
-                            contentDescription = null,
-                            tint = DominoGold,
-                            modifier = Modifier.size(22.dp)
+            // TOP: Compact Header Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = DominoGold.copy(alpha = 0.15f),
+                        border = BorderStroke(1.2.dp, DominoGold.copy(alpha = 0.7f)),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Groups,
+                                contentDescription = null,
+                                tint = DominoGold,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "SALA DE INVITADOS",
+                            color = DominoGold,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 17.sp
+                        )
+                        Text(
+                            text = "Partida de $requiredCount Jugadores" +
+                                    if (state.playMode.isTeams && requiredCount == 4) " • Parejas (2 vs 2)" else " • Individual",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 12.sp
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = "SALA DE INVITADOS",
-                        color = DominoGold,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp
-                    )
-                    Text(
-                        text = "Partida de $requiredCount Jugadores" +
-                                if (state.playMode.isTeams && requiredCount == 4) " • Parejas (2 vs 2)" else " • Individual",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 12.sp
+
+                IconButton(
+                    onClick = onCancel,
+                    modifier = Modifier.size(38.dp).testTag("btn_close_waiting_room")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Salir de la Sala",
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
 
-            IconButton(
-                onClick = onCancel,
-                modifier = Modifier.testTag("btn_close_waiting_room")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Salir de la Sala",
-                    tint = Color(0xFF94A3B8)
-                )
-            }
-        }
+            Spacer(modifier = Modifier.height(12.dp))
 
-        // MIDDLE SCROLLABLE CONTENT: Code Card, Status, and Seats
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(vertical = 12.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Room Code Display Hero Card
+            // CARD 1: CÓDIGO DE LA SALA (Exact layout from screenshot)
             Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = Color(0xFF1E293B).copy(alpha = 0.85f),
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF1E293B).copy(alpha = 0.9f),
                 border = BorderStroke(1.5.dp, DominoGold.copy(alpha = 0.8f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
@@ -1436,62 +1441,63 @@ fun DominoRoomWaitingView(
                         color = Color(0xFF94A3B8),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
+                        letterSpacing = 1.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = code,
-                        fontSize = 32.sp,
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.Black,
-                        letterSpacing = 4.sp,
+                        letterSpacing = 3.sp,
                         color = DominoGold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Comparte este código para que tus invitados se unan desde la app",
-                        color = Color(0xFFCBD5E1),
-                        fontSize = 12.sp,
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp,
                         textAlign = TextAlign.Center
                     )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
+                    Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Copy Button
+                        // Button: Copiar Código
                         OutlinedButton(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 val clip = ClipData.newPlainText("Código de Sala", code)
                                 clipboard.setPrimaryClip(clip)
                                 codeCopied = true
-                                Toast.makeText(context, "Código $code copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Código $code copiado", Toast.LENGTH_SHORT).show()
                             },
                             shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(1.dp, DominoGold.copy(alpha = 0.7f)),
+                            border = BorderStroke(1.2.dp, DominoGold.copy(alpha = 0.85f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = Color(0x15FFFFFF)
+                            ),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(42.dp)
+                                .height(44.dp)
                                 .testTag("btn_copy_room_code")
                         ) {
                             Icon(
                                 imageVector = if (codeCopied) Icons.Default.CheckCircle else Icons.Default.ContentCopy,
-                                contentDescription = null,
+                                contentDescription = "Copiar Código",
                                 tint = DominoGold,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (codeCopied) "¡Copiado!" else "Copiar Código",
+                                text = if (codeCopied) "Copiado" else "Copiar Código",
                                 color = DominoGold,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.5.sp
                             )
                         }
 
-                        // Share Button
+                        // Button: Compartir
                         Button(
                             onClick = {
                                 val sendIntent = Intent().apply {
@@ -1509,42 +1515,41 @@ fun DominoRoomWaitingView(
                             colors = ButtonDefaults.buttonColors(containerColor = DominoGold),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(42.dp)
+                                .height(44.dp)
                                 .testTag("btn_share_room_code")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Share,
-                                contentDescription = null,
+                                contentDescription = "Compartir Código",
                                 tint = Color.Black,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Compartir",
                                 color = Color.Black,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.5.sp
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Progress Banner
+            // CARD 2: PARTICIPANTES CONECTADOS (Exact layout from screenshot)
+            val remainingCount = (requiredCount - currentCount).coerceAtLeast(0)
             Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = if (isRoomFull) Color(0xFF064E3B).copy(alpha = 0.7f) else Color(0xFF1E293B).copy(alpha = 0.6f),
-                border = BorderStroke(
-                    1.dp,
-                    if (isRoomFull) Color(0xFF10B981) else Color(0xFF334155)
-                ),
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF1E293B).copy(alpha = 0.9f),
+                border = BorderStroke(1.dp, Color(0xFF334155).copy(alpha = 0.7f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1553,26 +1558,25 @@ fun DominoRoomWaitingView(
                     ) {
                         Text(
                             text = "Participantes Conectados",
-                            color = Color(0xFFE2E8F0),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.5.sp
                         )
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = if (isRoomFull) Color(0xFF10B981) else DominoGold,
-                            modifier = Modifier.padding(start = 4.dp)
+                            color = if (isRoomFull) Color(0xFF10B981) else DominoGold
                         ) {
                             Text(
                                 text = "$currentCount de $requiredCount",
                                 color = Color.Black,
                                 fontWeight = FontWeight.Black,
                                 fontSize = 12.sp,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     LinearProgressIndicator(
                         progress = { (currentCount.toFloat() / requiredCount.toFloat()).coerceIn(0f, 1f) },
@@ -1581,196 +1585,191 @@ fun DominoRoomWaitingView(
                             .height(8.dp)
                             .clip(RoundedCornerShape(4.dp)),
                         color = if (isRoomFull) Color(0xFF10B981) else DominoGold,
-                        trackColor = Color.White.copy(alpha = 0.1f)
+                        trackColor = Color.White.copy(alpha = 0.12f)
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = if (isRoomFull)
-                            "¡Todos los participantes han entrado! Ya puedes iniciar la mano."
-                        else
-                            "Esperando a que entren ${requiredCount - currentCount} participante(s) más con el código para iniciar la mano.",
-                        color = if (isRoomFull) Color(0xFF6EE7B7) else Color(0xFF94A3B8),
-                        fontSize = 12.sp,
+                        text = if (isRoomFull) {
+                            "¡Mesa completa! Lista para iniciar la partida."
+                        } else {
+                            "Esperando a que entren $remainingCount participante(s) más con el código para iniciar la mano."
+                        },
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp,
                         textAlign = TextAlign.Center,
-                        lineHeight = 16.sp
+                        lineHeight = 15.sp,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Player Slots
-            Text(
-                text = "ASIENTOS DE LA MESA",
-                color = Color(0xFF94A3B8),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
+            // ASIENTOS DE LA MESA EN CUADRÍCULA (2 columnas, enlarged)
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 4.dp)
-            )
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "ASIENTOS DE LA MESA",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = if (isRoomFull) "Mesa Completa" else "Esperando participantes",
+                    color = if (isRoomFull) Color(0xFF34D399) else Color(0xFF64748B),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
 
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val rowsCount = (requiredCount + 1) / 2
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                for (seatIndex in 0 until requiredCount) {
-                    val player = state.players.getOrNull(seatIndex)
-                    if (player != null) {
-                        // Occupied Seat
-                        val isHost = seatIndex == 0
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF1E293B).copy(alpha = 0.9f),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isHost) DominoGold.copy(alpha = 0.8f) else Color(0xFF10B981).copy(alpha = 0.7f)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = PlayerColors.getOrElse(seatIndex) { Color(0xFF38BDF8) },
-                                        modifier = Modifier.size(34.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                text = player.name.firstOrNull()?.uppercase() ?: "J",
-                                                color = Color.Black,
-                                                fontWeight = FontWeight.Black,
-                                                fontSize = 14.sp
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(10.dp))
-
-                                    Column {
-                                        Text(
-                                            text = player.name,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp
-                                        )
-                                        Text(
-                                            text = if (isHost) "Anfitrión de la sala" else "Invitado con código",
-                                            color = if (isHost) DominoGold else Color(0xFF38BDF8),
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color(0xFF10B981).copy(alpha = 0.2f),
-                                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f))
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                for (rowIndex in 0 until rowsCount) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (colIndex in 0 until 2) {
+                            val seatIndex = rowIndex * 2 + colIndex
+                            if (seatIndex < requiredCount) {
+                                val player = state.players.getOrNull(seatIndex)
+                                Box(modifier = Modifier.weight(1f)) {
+                                    if (player != null) {
+                                        val isHost = seatIndex == 0
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = Color(0xFF1E293B).copy(alpha = 0.9f),
+                                            border = BorderStroke(
+                                                1.2.dp,
+                                                if (isHost) DominoGold.copy(alpha = 0.8f) else Color(0xFF10B981).copy(alpha = 0.7f)
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = null,
-                                                tint = Color(0xFF34D399),
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "Listo",
-                                                color = Color(0xFF34D399),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Surface(
+                                                        shape = CircleShape,
+                                                        color = PlayerColors.getOrElse(seatIndex) { Color(0xFF38BDF8) },
+                                                        modifier = Modifier.size(30.dp)
+                                                    ) {
+                                                        Box(contentAlignment = Alignment.Center) {
+                                                            Text(
+                                                                text = player.name.firstOrNull()?.uppercase() ?: "J",
+                                                                color = Color.Black,
+                                                                fontWeight = FontWeight.Black,
+                                                                fontSize = 13.sp
+                                                            )
+                                                        }
+                                                    }
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = player.name,
+                                                            color = Color.White,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 13.sp,
+                                                            maxLines = 1
+                                                        )
+                                                        Text(
+                                                            text = if (isHost) "Anfitrión" else "Invitado",
+                                                            color = if (isHost) DominoGold else Color(0xFF38BDF8),
+                                                            fontSize = 10.5.sp
+                                                        )
+                                                    }
+                                                }
 
-                                    if (!isHost) {
-                                        IconButton(
-                                            onClick = { onRemoveGuest(seatIndex) },
-                                            modifier = Modifier.size(32.dp)
+                                                if (!isHost) {
+                                                    IconButton(
+                                                        onClick = { onRemoveGuest(seatIndex) },
+                                                        modifier = Modifier.size(26.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Delete,
+                                                            contentDescription = "Remover",
+                                                            tint = Color(0xFFEF4444).copy(alpha = 0.8f),
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                } else {
+                                                    Icon(
+                                                        imageVector = Icons.Default.CheckCircle,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF34D399),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // Empty Seat Waiting
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = Color(0xFF0F172A).copy(alpha = 0.5f),
+                                            border = BorderStroke(1.dp, Color(0xFF334155).copy(alpha = 0.6f)),
+                                            modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "Remover",
-                                                tint = Color(0xFFEF4444).copy(alpha = 0.7f),
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = Color.White.copy(alpha = 0.06f),
+                                                    modifier = Modifier.size(30.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.HourglassEmpty,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFF64748B),
+                                                            modifier = Modifier.size(15.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column {
+                                                    Text(
+                                                        text = "Asiento #${seatIndex + 1}",
+                                                        color = Color(0xFF94A3B8),
+                                                        fontWeight = FontWeight.Medium,
+                                                        fontSize = 12.sp
+                                                    )
+                                                    Text(
+                                                        text = "Esperando...",
+                                                        color = Color(0xFF64748B),
+                                                        fontSize = 10.sp
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        }
-                    } else {
-                        // Empty Seat Waiting
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF0F172A).copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, Color(0xFF334155).copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = Color.White.copy(alpha = 0.05f),
-                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-                                        modifier = Modifier.size(34.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Default.HourglassEmpty,
-                                                contentDescription = null,
-                                                tint = Color(0xFF64748B),
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(10.dp))
-
-                                    Column {
-                                        Text(
-                                            text = "Asiento #${seatIndex + 1}: Esperando invitado...",
-                                            color = Color(0xFF94A3B8),
-                                            fontWeight = FontWeight.Medium,
-                                            fontSize = 13.sp
-                                        )
-                                        Text(
-                                            text = "Ingresar usando código $code",
-                                            color = Color(0xFF64748B),
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-
-                                Text(
-                                    text = "Pendiente",
-                                    color = Color(0xFF64748B),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
@@ -1778,101 +1777,119 @@ fun DominoRoomWaitingView(
             }
         }
 
-        // BOTTOM ACTIONS
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        // STICKY BOTTOM ACTIONS BAR: Always directly visible and accessible without scrolling
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
+            color = Color(0xFF0F172A).copy(alpha = 0.97f),
+            border = BorderStroke(1.dp, Color(0xFF334155).copy(alpha = 0.7f)),
+            tonalElevation = 8.dp
         ) {
-            if (isRoomFull) {
-                // All players ready - Host can start!
-                Button(
-                    onClick = onStartGame,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DominoGold),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp)
-                        .testTag("btn_start_friends_match")
+                        .widthIn(max = 580.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = Color.Black,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "¡INICIAR PARTIDA Y REPARTIR!",
-                        color = Color.Black,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 15.sp
-                    )
-                }
-            } else {
-                // Not full yet - Options to add guest with code or complete with bots
-                Button(
-                    onClick = {
-                        guestNameInput = "Invitado ${currentCount + 1}"
-                        showAddGuestDialog = true
-                    },
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("btn_simulate_guest_join")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PersonAdd,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Ingresar Invitado con Código",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                }
+                    if (isRoomFull) {
+                        // All players ready - Host can start!
+                        Button(
+                            onClick = onStartGame,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DominoGold),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .testTag("btn_start_friends_match")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "¡INICIAR PARTIDA Y REPARTIR!",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 15.sp
+                            )
+                        }
+                    } else {
+                        // Not full yet - Option to add guest with code or complete with bots
+                        Button(
+                            onClick = {
+                                guestNameInput = "Invitado ${currentCount + 1}"
+                                showAddGuestDialog = true
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("btn_simulate_guest_join")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PersonAdd,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Ingresar Invitado con Código",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.5.sp
+                            )
+                        }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onFillBotsAndStart,
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, DominoGold.copy(alpha = 0.7f)),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp)
-                            .testTag("btn_fill_bots_and_start")
-                    ) {
-                        Text(
-                            text = "Completar con Bots",
-                            color = DominoGold,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 11.sp
-                        )
-                    }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onFillBotsAndStart,
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.2.dp, DominoGold.copy(alpha = 0.85f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .testTag("btn_fill_bots_and_start")
+                            ) {
+                                Text(
+                                    text = "Completar con Bots",
+                                    color = DominoGold,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 12.sp
+                                )
+                            }
 
-                    OutlinedButton(
-                        onClick = onCancel,
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFF64748B)),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp)
-                            .testTag("btn_cancel_room")
-                    ) {
-                        Text(
-                            text = "Cancelar Sala",
-                            color = Color(0xFF94A3B8),
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 11.sp
-                        )
+                            OutlinedButton(
+                                onClick = onCancel,
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFF64748B)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .testTag("btn_cancel_room")
+                            ) {
+                                Text(
+                                    text = "Cancelar Sala",
+                                    color = Color(0xFF94A3B8),
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
