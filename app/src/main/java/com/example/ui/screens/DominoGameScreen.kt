@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -73,6 +74,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -101,6 +103,7 @@ fun DominoGameScreen(
     viewModel: DominoViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val tableState by viewModel.tableState.collectAsStateWithLifecycle()
@@ -281,6 +284,19 @@ fun DominoGameScreen(
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.Calculate, contentDescription = null)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Buscar actualizaciones") },
+                                    onClick = {
+                                        showMenu = false
+                                        Toast.makeText(context, "Verificando en GitHub...", Toast.LENGTH_SHORT).show()
+                                        viewModel.checkForAppUpdates { _, message ->
+                                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.CloudDownload, contentDescription = null)
                                     }
                                 )
                             }

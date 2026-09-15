@@ -107,15 +107,20 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
         checkForAppUpdates()
     }
 
-    fun checkForAppUpdates() {
+    fun checkForAppUpdates(onResult: ((hasUpdate: Boolean, message: String) -> Unit)? = null) {
         viewModelScope.launch {
             try {
                 val update = updateChecker.checkForUpdates(BuildConfig.BUILD_TIMESTAMP)
                 if (update != null && update.hasUpdate) {
                     _availableUpdate.value = update
+                    onResult?.invoke(true, "¡Nueva versión disponible para descargar!")
+                } else if (update != null) {
+                    onResult?.invoke(false, "Tu aplicación ya está al día con la última versión disponible.")
+                } else {
+                    onResult?.invoke(false, "No se pudo conectar con GitHub o sin conexión a internet.")
                 }
             } catch (e: Exception) {
-                // Silently ignore if offline
+                onResult?.invoke(false, "Error al comprobar actualizaciones.")
             }
         }
     }

@@ -46,6 +46,9 @@ jobs:
           yes | "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
       - name: Build Android APK
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           chmod +x gradlew || true
           if [ -f ./gradlew ]; then
@@ -58,18 +61,23 @@ jobs:
         run: |
           mkdir -p release-artifacts
           cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/AnotadorDomino.apk
+          echo "{\"buildNumber\": ${{ github.run_number }}, \"commitSha\": \"${{ github.sha }}\", \"timestamp\": $(date +%s%3N), \"publishedAt\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"}" > release-artifacts/version.json
 
       - name: Upload APK as Workflow Artifact
         uses: actions/upload-artifact@v4
         with:
           name: AnotadorDomino-apk
-          path: release-artifacts/AnotadorDomino.apk
+          path: |
+            release-artifacts/AnotadorDomino.apk
+            release-artifacts/version.json
 
       - name: Publish Versioned Release (Tags)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: release-artifacts/AnotadorDomino.apk
+          files: |
+            release-artifacts/AnotadorDomino.apk
+            release-artifacts/version.json
           generate_release_notes: true
 
       - name: Publish / Update Latest Release (Branch push & manual trigger)
@@ -86,4 +94,6 @@ jobs:
             [📥 Descargar AnotadorDomino.apk](https://github.com/${{ github.repository }}/releases/download/latest/AnotadorDomino.apk)
           draft: false
           prerelease: false
-          files: release-artifacts/AnotadorDomino.apk
+          files: |
+            release-artifacts/AnotadorDomino.apk
+            release-artifacts/version.json
