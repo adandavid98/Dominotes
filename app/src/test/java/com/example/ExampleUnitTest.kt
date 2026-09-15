@@ -223,4 +223,49 @@ class ExampleUnitTest {
     assertEquals(firstTile.right, stateAfterOpen.rightEnd)
     assertEquals(3, stateAfterOpen.currentTurnIndex)
   }
+
+  @Test
+  fun testTwoPlayerManyTilesStayStrictlyInsideBounds() {
+    // Simulate a board with 20 tiles (typical 2-player deep game)
+    val tiles = (0..19).map { i ->
+      DominoTile(
+        id = i,
+        left = i % 7,
+        right = if (i % 3 == 0) (i % 7) else (i + 1) % 7 // some doubles
+      )
+    }
+
+    val layout = calculateDominoSnakeLayout(
+      boardTiles = tiles,
+      initialTileId = tiles[10].id,
+      baseUnit = 24f,
+      maxTilesInRow = 3
+    )
+
+    assertTrue("Bounding width must be positive", layout.boundingWidth > 0f)
+    assertTrue("Bounding height must be positive", layout.boundingHeight > 0f)
+
+    for (placed in layout.tiles) {
+      assertTrue("Tile x must be >= 0, was ${placed.x}", placed.x >= -0.001f)
+      assertTrue("Tile y must be >= 0, was ${placed.y}", placed.y >= -0.001f)
+      assertTrue(
+        "Tile right edge (${placed.x + placed.width}) must be <= boundingWidth (${layout.boundingWidth})",
+        placed.x + placed.width <= layout.boundingWidth + 0.001f
+      )
+      assertTrue(
+        "Tile bottom edge (${placed.y + placed.height}) must be <= boundingHeight (${layout.boundingHeight})",
+        placed.y + placed.height <= layout.boundingHeight + 0.001f
+      )
+    }
+
+    // Check with available dimensions of mobile table
+    val availW = 320f
+    val availH = 340f
+    val autoScale = minOf(availW / layout.boundingWidth, availH / layout.boundingHeight).coerceIn(0.15f, 1.15f)
+    val scaledW = layout.boundingWidth * autoScale
+    val scaledH = layout.boundingHeight * autoScale
+
+    assertTrue("Scaled width ($scaledW) must fit inside availW ($availW)", scaledW <= availW + 0.001f)
+    assertTrue("Scaled height ($scaledH) must fit inside availH ($availH)", scaledH <= availH + 0.001f)
+  }
 }

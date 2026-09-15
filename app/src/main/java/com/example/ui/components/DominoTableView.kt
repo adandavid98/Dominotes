@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -480,46 +481,59 @@ fun DominoTableView(
                         )
                     }
 
-                    // Dynamically calculate scale so all tiles fit on screen with zero gap & no scroll
-                    val availW = (maxWidth.value - 20f).coerceAtLeast(60f)
-                    val availH = (maxHeight.value - 20f).coerceAtLeast(60f)
-                    val autoScale = minOf(availW / layout.boundingWidth, availH / layout.boundingHeight).coerceIn(0.35f, 1.25f)
+                    // Dynamically calculate scale so all tiles fit completely inside the table with safety margins
+                    val availW = (maxWidth.value - 32f).coerceAtLeast(60f)
+                    val availH = (maxHeight.value - 28f).coerceAtLeast(60f)
+                    val autoScale = minOf(
+                        availW / layout.boundingWidth,
+                        availH / layout.boundingHeight
+                    ).coerceIn(0.15f, 1.15f)
 
+                    val scaledW = layout.boundingWidth * autoScale
+                    val scaledH = layout.boundingHeight * autoScale
+
+                    // Outer Box has the scaled dimensions and is centered by BoxWithConstraints(Alignment.Center)
                     Box(
                         modifier = Modifier
-                            .size(layout.boundingWidth.dp, layout.boundingHeight.dp)
-                            .graphicsLayer {
-                                scaleX = autoScale
-                                scaleY = autoScale
-                                transformOrigin = TransformOrigin.Center
-                            }
+                            .requiredSize(scaledW.dp, scaledH.dp)
                     ) {
-                        layout.tiles.forEach { placedTile ->
-                            key(placedTile.tile.id) {
-                                val isOpenLeft = placedTile.index == 0
-                                val isOpenRight = placedTile.index == state.boardTiles.size - 1
+                        // Inner Box has the unscaled layout bounds, scaled via graphicsLayer anchored at (0, 0)
+                        Box(
+                            modifier = Modifier
+                                .requiredSize(layout.boundingWidth.dp, layout.boundingHeight.dp)
+                                .graphicsLayer {
+                                    scaleX = autoScale
+                                    scaleY = autoScale
+                                    transformOrigin = TransformOrigin(0f, 0f)
+                                }
+                        ) {
+                            layout.tiles.forEach { placedTile ->
+                                key(placedTile.tile.id) {
+                                    val isOpenLeft = placedTile.index == 0
+                                    val isOpenRight = placedTile.index == state.boardTiles.size - 1
 
-                                val canPlayLeft = isOpenLeft && isHumanTurn && selectedTile != null && (state.leftEnd == null || selectedTile.canMatch(state.leftEnd))
-                                val canPlayRight = isOpenRight && isHumanTurn && selectedTile != null && (state.rightEnd == null || selectedTile.canMatch(state.rightEnd))
-                                val isNewlyPlaced = placedTile.tile.id == state.lastPlayedTile?.id
+                                    val canPlayLeft = isOpenLeft && isHumanTurn && selectedTile != null && (state.leftEnd == null || selectedTile.canMatch(state.leftEnd))
+                                    val canPlayRight = isOpenRight && isHumanTurn && selectedTile != null && (state.rightEnd == null || selectedTile.canMatch(state.rightEnd))
+                                    val isNewlyPlaced = placedTile.tile.id == state.lastPlayedTile?.id
 
-                                AnimatedPlacedTileView(
-                                    placedTile = placedTile,
-                                    isNewlyPlaced = isNewlyPlaced,
-                                    sourceStartX = flightTrajectory.startX,
-                                    sourceStartY = flightTrajectory.startY,
-                                    sourceScale = flightTrajectory.startScale,
-                                    sourceRotation = flightTrajectory.startRotation,
-                                    canPlayLeft = canPlayLeft,
-                                    canPlayRight = canPlayRight,
-                                    onPlayClick = {
-                                        if (canPlayLeft) {
-                                            onPlayTile(selectedTile!!, TilePlacement.LEFT)
-                                        } else if (canPlayRight) {
-                                            onPlayTile(selectedTile!!, TilePlacement.RIGHT)
+                                    AnimatedPlacedTileView(
+                                        placedTile = placedTile,
+                                        isNewlyPlaced = isNewlyPlaced,
+                                        sourceStartX = flightTrajectory.startX,
+                                        sourceStartY = flightTrajectory.startY,
+                                        sourceScale = flightTrajectory.startScale,
+                                        sourceRotation = flightTrajectory.startRotation,
+                                        canPlayLeft = canPlayLeft,
+                                        canPlayRight = canPlayRight,
+                                        onPlayClick = {
+                                            if (canPlayLeft) {
+                                                onPlayTile(selectedTile!!, TilePlacement.LEFT)
+                                            } else if (canPlayRight) {
+                                                onPlayTile(selectedTile!!, TilePlacement.RIGHT)
+                                            }
                                         }
-                                    }
-                                )
+                                    )
+                                }
                             }
                         }
                     }
