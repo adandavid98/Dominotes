@@ -50,20 +50,11 @@ class AppUpdateChecker(private val context: Context) {
 
             val title = json.optString("name", "Nueva versión disponible")
             val notes = json.optString("body", "")
-            val publishedAtStr = json.optString("published_at", "")
-
-            var publishedMillis: Long = 0
-            if (publishedAtStr.isNotBlank()) {
-                try {
-                    val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-                    sdf.timeZone = TimeZone.getTimeZone("UTC")
-                    publishedMillis = sdf.parse(publishedAtStr)?.time ?: 0
-                } catch (e: Exception) {
-                    publishedMillis = 0
-                }
-            }
+            val publishedMillis = parseIsoDate(json.optString("published_at", ""))
+            val updatedMillis = parseIsoDate(json.optString("updated_at", ""))
 
             var apkUrl = DEFAULT_DOWNLOAD_URL
+            var assetMillis = 0L
             val assets = json.optJSONArray("assets")
             if (assets != null) {
                 for (i in 0 until assets.length()) {
@@ -71,23 +62,46 @@ class AppUpdateChecker(private val context: Context) {
                     val name = asset.optString("name", "")
                     if (name.endsWith(".apk", ignoreCase = true)) {
                         apkUrl = asset.optString("browser_download_url", DEFAULT_DOWNLOAD_URL)
+                        val assetUpdated = parseIsoDate(asset.optString("updated_at", ""))
+                        val assetCreated = parseIsoDate(asset.optString("created_at", ""))
+                        assetMillis = maxOf(assetUpdated, assetCreated)
                         break
                     }
                 }
             }
 
-            val isNewer = publishedMillis > (currentBuildTimestamp + 60_000L)
+            val latestRemoteMillis = maxOf(publishedMillis, updatedMillis, assetMillis)
+            // An update exists if the latest remote artifact/release timestamp is newer than local build timestamp + 60s
+            val isNewer = latestRemoteMillis > (currentBuildTimestamp + 60_000L)
 
             UpdateInfo(
                 hasUpdate = isNewer,
                 releaseTitle = title,
                 releaseNotes = notes,
                 downloadUrl = apkUrl,
-                publishedAtMillis = publishedMillis
+                publishedAtMillis = latestRemoteMillis
             )
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun parseIsoDate(dateStr: String): Long {
+        if (dateStr.isBlank()) return 0L
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ssXXX"
+        )
+        for (pattern in formats) {
+            try {
+                val sdf = SimpleDateFormat(pattern, Locale.US)
+                sdf.timeZone = TimeZone.getTimeZone("UTC")
+                val parsed = sdf.parse(dateStr)
+                if (parsed != null) return parsed.time
+            } catch (_: Exception) {}
+        }
+        return 0L
     }
 
     fun openDownloadUrl(url: String) {
