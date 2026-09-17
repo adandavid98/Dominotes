@@ -45,6 +45,17 @@ jobs:
         run: |
           yes | "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
+      - name: Extract Version Info
+        id: version_info
+        run: |
+          VERSION_NAME=$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | cut -d'"' -f2)
+          VERSION_CODE=$(grep -o 'versionCode = [0-9]*' app/build.gradle.kts | awk '{print $3}')
+          if [ -z "$VERSION_NAME" ]; then VERSION_NAME="1.3"; fi
+          if [ -z "$VERSION_CODE" ]; then VERSION_CODE="4"; fi
+          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+          echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_ENV
+          echo "Extracted Version: $VERSION_NAME (Code: $VERSION_CODE)"
+
       - name: Build Android APK
         env:
           BUILD_NUMBER: ${{ github.run_number }}
@@ -61,7 +72,8 @@ jobs:
         run: |
           mkdir -p release-artifacts
           cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/AnotadorDomino.apk
-          echo "{\"buildNumber\": ${{ github.run_number }}, \"commitSha\": \"${{ github.sha }}\", \"timestamp\": $(date +%s%3N), \"publishedAt\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"}" > release-artifacts/version.json
+          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/AnotadorDomino-v${VERSION_NAME}.apk
+          echo "{\"versionName\": \"${VERSION_NAME}\", \"versionCode\": ${VERSION_CODE}, \"buildNumber\": ${{ github.run_number }}, \"commitSha\": \"${{ github.sha }}\", \"timestamp\": $(date +%s%3N), \"publishedAt\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"}" > release-artifacts/version.json
 
       - name: Upload APK as Workflow Artifact
         uses: actions/upload-artifact@v4
@@ -69,31 +81,43 @@ jobs:
           name: AnotadorDomino-apk
           path: |
             release-artifacts/AnotadorDomino.apk
+            release-artifacts/AnotadorDomino-v${{ env.VERSION_NAME }}.apk
             release-artifacts/version.json
 
-      - name: Publish Versioned Release (Tags)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish Versioned Tag Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release-artifacts/AnotadorDomino.apk
-            release-artifacts/version.json
-          generate_release_notes: true
-
-      - name: Publish / Update Latest Release (Branch push & manual trigger)
-        if: "!startsWith(github.ref, 'refs/tags/')"
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: "Última Versión (Auto-Release)"
+          tag_name: v${{ env.VERSION_NAME }}
+          name: "Versión ${{ env.VERSION_NAME }} (Build ${{ env.VERSION_CODE }})"
           body: |
-            🚀 **APK actualizado automáticamente con los últimos cambios.**
-
-            📲 **Descarga directa para Android:**
-            Haz clic aquí para descargar e instalar el archivo:
-            [📥 Descargar AnotadorDomino.apk](https://github.com/${{ github.repository }}/releases/download/latest/AnotadorDomino.apk)
+            🚀 **Versión ${{ env.VERSION_NAME }} de Dominotes**
+            - 🏷️ **Versión:** `v${{ env.VERSION_NAME }}`
+            - 🔢 **Código de versión:** `${{ env.VERSION_CODE }}`
+            - 🏗️ **Build:** `${{ github.run_number }}`
+            
+            📲 **Descargas directas para Android:**
+            - [📥 Descargar AnotadorDomino.apk](https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION_NAME }}/AnotadorDomino.apk)
+            - [📥 Descargar AnotadorDomino-v${{ env.VERSION_NAME }}.apk](https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION_NAME }}/AnotadorDomino-v${{ env.VERSION_NAME }}.apk)
           draft: false
           prerelease: false
           files: |
             release-artifacts/AnotadorDomino.apk
+            release-artifacts/AnotadorDomino-v${{ env.VERSION_NAME }}.apk
+            release-artifacts/version.json
+
+      - name: Update Latest Release Reference
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Última Versión (v${{ env.VERSION_NAME }})"
+          body: |
+            🚀 **Versión ${{ env.VERSION_NAME }} de Dominotes (Build ${{ env.VERSION_CODE }})**
+            
+            📲 **Descarga directa:**
+            - [📥 Descargar AnotadorDomino.apk](https://github.com/${{ github.repository }}/releases/download/latest/AnotadorDomino.apk)
+          draft: false
+          prerelease: false
+          files: |
+            release-artifacts/AnotadorDomino.apk
+            release-artifacts/AnotadorDomino-v${{ env.VERSION_NAME }}.apk
             release-artifacts/version.json

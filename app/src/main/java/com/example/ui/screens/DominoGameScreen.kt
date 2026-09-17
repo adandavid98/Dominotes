@@ -430,7 +430,10 @@ fun DominoGameScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Nueva versión disponible",
+                                    text = if (!availableUpdate?.remoteVersionName.isNullOrBlank())
+                                        "Nueva versión v${availableUpdate?.remoteVersionName} disponible"
+                                    else
+                                        "Nueva versión disponible",
                                     color = Color.White,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold

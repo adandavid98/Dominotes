@@ -18,7 +18,9 @@ data class UpdateInfo(
     val releaseTitle: String,
     val releaseNotes: String,
     val downloadUrl: String,
-    val publishedAtMillis: Long
+    val publishedAtMillis: Long,
+    val remoteVersionName: String = "",
+    val remoteVersionCode: Long = 0L
 )
 
 class AppUpdateChecker(private val context: Context) {
@@ -38,8 +40,12 @@ class AppUpdateChecker(private val context: Context) {
             "https://github.com/adandavid98/Dominotes/releases/latest/download/version.json"
     }
 
-    suspend fun checkForUpdates(currentBuildTimestamp: Long): UpdateInfo? = withContext(Dispatchers.IO) {
-        // Strategy 1: Fast CDN version.json (No GitHub API rate limits)
+    suspend fun checkForUpdates(
+        currentBuildTimestamp: Long,
+        currentVersionName: String = "",
+        currentVersionCode: Long = 0L
+    ): UpdateInfo? = withContext(Dispatchers.IO) {
+        // Strategy 1: Fast CDN version.json (No GitHub API rate limits, contains versionCode & versionName)
         try {
             val vRequest = Request.Builder()
                 .url(VERSION_JSON_URL)
@@ -50,19 +56,37 @@ class AppUpdateChecker(private val context: Context) {
                 val vBody = vResponse.body?.string()
                 if (!vBody.isNullOrBlank()) {
                     val vJson = JSONObject(vBody)
+                    val remoteVersionName = vJson.optString("versionName", "")
+                    val remoteVersionCode = vJson.optLong("versionCode", 0L)
                     val remoteTimestamp = vJson.optLong("timestamp", 0L)
                     val publishedAt = vJson.optString("publishedAt", "")
                     val dateMillis = if (remoteTimestamp > 0) remoteTimestamp else parseIsoDate(publishedAt)
-                    if (dateMillis > 0) {
-                        val isNewer = dateMillis > (currentBuildTimestamp + 60_000L)
-                        return@withContext UpdateInfo(
-                            hasUpdate = isNewer,
-                            releaseTitle = "Última Versión (Auto-Release)",
-                            releaseNotes = "Nueva versión disponible en GitHub.",
-                            downloadUrl = DEFAULT_DOWNLOAD_URL,
-                            publishedAtMillis = dateMillis
-                        )
+
+                    val isNewer = if (remoteVersionCode > 0 && currentVersionCode > 0) {
+                        remoteVersionCode > currentVersionCode
+                    } else if (remoteVersionName.isNotBlank() && currentVersionName.isNotBlank()) {
+                        compareSemVer(remoteVersionName, currentVersionName) > 0
+                    } else if (dateMillis > 0) {
+                        dateMillis > (currentBuildTimestamp + 60_000L)
+                    } else {
+                        false
                     }
+
+                    val title = if (remoteVersionName.isNotBlank()) {
+                        "Versión $remoteVersionName Disponible"
+                    } else {
+                        "Última Versión (Auto-Release)"
+                    }
+
+                    return@withContext UpdateInfo(
+                        hasUpdate = isNewer,
+                        releaseTitle = title,
+                        releaseNotes = "Nueva versión $remoteVersionName disponible para descargar en GitHub.",
+                        downloadUrl = DEFAULT_DOWNLOAD_URL,
+                        publishedAtMillis = dateMillis,
+                        remoteVersionName = remoteVersionName,
+                        remoteVersionCode = remoteVersionCode
+                    )
                 }
             }
         } catch (_: Exception) {}
@@ -80,10 +104,15 @@ class AppUpdateChecker(private val context: Context) {
                 val bodyString = response.body?.string()
                 if (!bodyString.isNullOrBlank()) {
                     val json = JSONObject(bodyString)
-                    val title = json.optString("name", "Nueva versión disponible")
+                    val tagName = json.optString("tag_name", "")
+                    val rawTitle = json.optString("name", "")
                     val notes = json.optString("body", "")
                     val publishedMillis = parseIsoDate(json.optString("published_at", ""))
                     val updatedMillis = parseIsoDate(json.optString("updated_at", ""))
+
+                    val remoteVersionName = extractVersionString(tagName).ifBlank {
+                        extractVersionString(rawTitle)
+                    }
 
                     var apkUrl = DEFAULT_DOWNLOAD_URL
                     var assetMillis = 0L
@@ -103,14 +132,23 @@ class AppUpdateChecker(private val context: Context) {
                     }
 
                     val latestRemoteMillis = maxOf(publishedMillis, updatedMillis, assetMillis)
-                    val isNewer = latestRemoteMillis > (currentBuildTimestamp + 60_000L)
+                    val isNewer = if (remoteVersionName.isNotBlank() && currentVersionName.isNotBlank()) {
+                        compareSemVer(remoteVersionName, currentVersionName) > 0
+                    } else if (latestRemoteMillis > 0) {
+                        latestRemoteMillis > (currentBuildTimestamp + 60_000L)
+                    } else {
+                        false
+                    }
+
+                    val displayTitle = if (rawTitle.isNotBlank()) rawTitle else "Versión $remoteVersionName"
 
                     return@withContext UpdateInfo(
                         hasUpdate = isNewer,
-                        releaseTitle = title,
+                        releaseTitle = displayTitle,
                         releaseNotes = notes,
                         downloadUrl = apkUrl,
-                        publishedAtMillis = latestRemoteMillis
+                        publishedAtMillis = latestRemoteMillis,
+                        remoteVersionName = remoteVersionName
                     )
                 }
             }
@@ -141,6 +179,28 @@ class AppUpdateChecker(private val context: Context) {
         } catch (_: Exception) {}
 
         null
+    }
+
+    private fun extractVersionString(input: String): String {
+        if (input.isBlank()) return ""
+        val match = Regex("""(?i)v?(\d+(\.\d+)+)""").find(input)
+        return match?.groupValues?.get(1) ?: ""
+    }
+
+    private fun compareSemVer(v1: String, v2: String): Int {
+        val clean1 = v1.trim().removePrefix("v").removePrefix("V")
+        val clean2 = v2.trim().removePrefix("v").removePrefix("V")
+        val parts1 = clean1.split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.map { it.toIntOrNull() ?: 0 }
+        val parts2 = clean2.split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.map { it.toIntOrNull() ?: 0 }
+        val maxLength = maxOf(parts1.size, parts2.size)
+        for (i in 0 until maxLength) {
+            val num1 = parts1.getOrElse(i) { 0 }
+            val num2 = parts2.getOrElse(i) { 0 }
+            if (num1 != num2) {
+                return num1.compareTo(num2)
+            }
+        }
+        return 0
     }
 
     private fun parseHttpDate(dateStr: String?): Long {

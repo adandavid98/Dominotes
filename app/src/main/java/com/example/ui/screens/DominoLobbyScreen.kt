@@ -185,7 +185,10 @@ fun DominoLobbyScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "¡Nueva Versión Disponible!",
+                                        text = if (availableUpdate.remoteVersionName.isNotBlank())
+                                            "¡Nueva Versión v${availableUpdate.remoteVersionName} Disponible!"
+                                        else
+                                            "¡Nueva Versión Disponible!",
                                         color = Color.White,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp
