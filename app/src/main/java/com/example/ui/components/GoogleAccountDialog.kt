@@ -69,7 +69,7 @@ import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
-private const val GOOGLE_SERVER_CLIENT_ID = "232140441409-d4vaa3ngl725trrsr6vtagcbldsl4g3v.apps.googleusercontent.com"
+private const val GOOGLE_SERVER_CLIENT_ID = "1010049189695-j1ru6tossc95ncju19p6tp7hho82114e.apps.googleusercontent.com"
 
 @Composable
 fun GoogleAccountDialog(
