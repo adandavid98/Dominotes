@@ -80,7 +80,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.model.ScoringDisplayMode
 import com.example.ui.ActiveGameState
 import com.example.ui.DominoViewModel
 import com.example.ui.MainAppTab
@@ -448,86 +447,7 @@ fun DominoGameScreen(
                         }
                     }
                 }
-                // Mode Switcher: "Por Rondas" vs "Acumulación Total"
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(4.dp)
-                    ) {
-                        val isRounds = state.displayMode == ScoringDisplayMode.RONDAS
-                        Surface(
-                            onClick = { viewModel.setDisplayMode(ScoringDisplayMode.RONDAS) },
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isRounds) MaterialTheme.colorScheme.surface else Color.Transparent,
-                            shadowElevation = if (isRounds) 2.dp else 0.dp,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("tab_mode_rounds")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(vertical = 10.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ViewAgenda,
-                                    contentDescription = null,
-                                    tint = if (isRounds) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Por Rondas",
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isRounds) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isRounds) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        val isQuick = state.displayMode == ScoringDisplayMode.ACUMULACION
-                        Surface(
-                            onClick = { viewModel.setDisplayMode(ScoringDisplayMode.ACUMULACION) },
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isQuick) MaterialTheme.colorScheme.surface else Color.Transparent,
-                            shadowElevation = if (isQuick) 2.dp else 0.dp,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("tab_mode_quick")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(vertical = 10.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Speed,
-                                    contentDescription = null,
-                                    tint = if (isQuick) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Acumulación Total",
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isQuick) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isQuick) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Action Bar with direct "Nueva Partida" button for both "Por Rondas" and "Acumulación Total"
+                // Action Bar with direct "Nueva Partida" button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -566,7 +486,7 @@ fun DominoGameScreen(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Score Cards Grid (2 to 4 players/teams)
+                // Score Cards Grid (2 to 4 players/teams) with direct point accumulation buttons always active
                 val chunkedPlayers = state.playerNames.indices.chunked(2)
                 chunkedPlayers.forEach { rowIndices ->
                     Row(
@@ -584,7 +504,7 @@ fun DominoGameScreen(
                                 score = score,
                                 targetScore = state.targetScore,
                                 isLeader = isLeader,
-                                showQuickControls = state.displayMode == ScoringDisplayMode.ACUMULACION,
+                                showQuickControls = true,
                                 onQuickAdd = { pts ->
                                     viewModel.quickAddPoints(playerIndex, pts)
                                 },

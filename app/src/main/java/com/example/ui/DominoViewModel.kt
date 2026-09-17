@@ -43,7 +43,7 @@ data class ActiveGameState(
     val playerNames: List<String> = listOf("Nosotros", "Ellos"),
     val scores: List<Int> = listOf(0, 0),
     val rounds: List<RoundEntity> = emptyList(),
-    val displayMode: ScoringDisplayMode = ScoringDisplayMode.RONDAS,
+    val displayMode: ScoringDisplayMode = ScoringDisplayMode.ACUMULACION,
     val isGameOver: Boolean = false,
     val winnerName: String? = null,
     val winnerIndex: Int? = null,
