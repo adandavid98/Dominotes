@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -109,50 +111,148 @@ fun DominoLobbyScreen(
         // When screen height is under 840dp (standard modern phones like Samsung S21+, iPhones, Pixels),
         // we use clean, compact vertical proportions so that ALL cards, sections, and the bottom start button
         // fit 100% comfortably within a single screen view without cutting off the button!
-        val isCompact = screenHeight < 840.dp
-        val isVeryCompact = screenHeight < 700.dp
         val isNarrow = screenWidth < 380.dp
+        // On very small legacy devices (< 660dp), keep it tight.
+        // On standard modern tall phones (660dp - 820dp, like S21+ ~720dp viewport), use comfortable balanced sizing.
+        // On large devices/tablets (> 820dp), use spacious luxury layout.
+        val isVeryShort = screenHeight < 660.dp
+        val isStandardPhone = screenHeight in 660.dp..820.dp
+        val isVeryCompact = isVeryShort
+        val isCompact = isVeryShort
 
         val outerHorizontalPadding = if (isNarrow) 12.dp else 16.dp
-        val outerVerticalPadding = if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 10.dp
-        val sectionSpacing = if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 10.dp
+        val outerVerticalPadding = when {
+            isVeryShort -> 4.dp
+            isStandardPhone -> 6.dp
+            else -> 10.dp
+        }
+        val sectionSpacing = when {
+            isVeryShort -> 4.dp
+            isStandardPhone -> 8.dp
+            else -> 12.dp
+        }
 
-        val heroTileWidth = if (isCompact) 22.dp else 28.dp
-        val heroTileHeight = if (isCompact) 36.dp else 46.dp
-        val heroTitleSize = if (isCompact) 17.sp else 20.sp
-        val heroSubtitleSize = if (isCompact) 11.sp else 12.sp
-        val heroPadding = if (isCompact) 8.dp else 12.dp
+        val heroTileWidth = when {
+            isVeryShort -> 22.dp
+            isStandardPhone -> 24.dp
+            else -> 28.dp
+        }
+        val heroTileHeight = when {
+            isVeryShort -> 36.dp
+            isStandardPhone -> 40.dp
+            else -> 46.dp
+        }
+        val heroTitleSize = when {
+            isVeryShort -> 17.sp
+            isStandardPhone -> 18.sp
+            else -> 20.sp
+        }
+        val heroSubtitleSize = when {
+            isVeryShort -> 11.sp
+            isStandardPhone -> 11.5.sp
+            else -> 12.sp
+        }
+        val heroPadding = when {
+            isVeryShort -> 8.dp
+            isStandardPhone -> 10.dp
+            else -> 14.dp
+        }
 
-        val modeIconSize = if (isCompact) 22.dp else 28.dp
-        val modeTitleSize = if (isCompact) 12.5.sp else 13.5.sp
-        val modeSubSize = if (isCompact) 10.sp else 11.sp
-        val modeVerticalPadding = if (isVeryCompact) 5.dp else if (isCompact) 7.dp else 12.dp
+        val modeIconSize = when {
+            isVeryShort -> 22.dp
+            isStandardPhone -> 26.dp
+            else -> 30.dp
+        }
+        val modeTitleSize = when {
+            isVeryShort -> 12.5.sp
+            isStandardPhone -> 13.5.sp
+            else -> 14.5.sp
+        }
+        val modeSubSize = when {
+            isVeryShort -> 10.sp
+            isStandardPhone -> 10.5.sp
+            else -> 11.sp
+        }
+        val modeVerticalPadding = when {
+            isVeryShort -> 5.dp
+            isStandardPhone -> 9.dp
+            else -> 13.dp
+        }
 
-        val playerCountNumberSize = if (isCompact) 15.sp else 17.sp
-        val playerCountIconSize = if (isCompact) 15.dp else 18.dp
-        val playerCountLabelSize = if (isCompact) 10.sp else 11.sp
-        val playerCountVerticalPadding = if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 10.dp
+        val playerCountNumberSize = when {
+            isVeryShort -> 15.sp
+            isStandardPhone -> 17.sp
+            else -> 19.sp
+        }
+        val playerCountIconSize = when {
+            isVeryShort -> 15.dp
+            isStandardPhone -> 17.dp
+            else -> 19.dp
+        }
+        val playerCountLabelSize = when {
+            isVeryShort -> 10.sp
+            isStandardPhone -> 11.sp
+            else -> 12.sp
+        }
+        val playerCountVerticalPadding = when {
+            isVeryShort -> 4.dp
+            isStandardPhone -> 8.dp
+            else -> 12.dp
+        }
 
-        val teamsTitleSize = if (isCompact) 11.5.sp else 12.5.sp
-        val teamsSubSize = if (isCompact) 9.5.sp else 10.5.sp
-        val teamsVerticalPadding = if (isVeryCompact) 4.dp else if (isCompact) 6.dp else 10.dp
+        val teamsTitleSize = when {
+            isVeryShort -> 11.5.sp
+            isStandardPhone -> 12.5.sp
+            else -> 13.5.sp
+        }
+        val teamsSubSize = when {
+            isVeryShort -> 9.5.sp
+            isStandardPhone -> 10.5.sp
+            else -> 11.5.sp
+        }
+        val teamsVerticalPadding = when {
+            isVeryShort -> 4.dp
+            isStandardPhone -> 8.dp
+            else -> 12.dp
+        }
 
-        val chipHeight = if (isCompact) 32.dp else 38.dp
-        val chipFontSize = if (isCompact) 11.sp else 12.sp
+        val chipHeight = when {
+            isVeryShort -> 32.dp
+            isStandardPhone -> 36.dp
+            else -> 40.dp
+        }
+        val chipFontSize = when {
+            isVeryShort -> 11.sp
+            isStandardPhone -> 12.sp
+            else -> 13.sp
+        }
 
-        val actionButtonHeight = if (isCompact) 46.dp else 52.dp
-        val actionButtonFontSize = if (isCompact) 14.sp else 15.sp
-        val actionButtonIconSize = if (isCompact) 20.dp else 24.dp
+        val actionButtonHeight = when {
+            isVeryShort -> 46.dp
+            isStandardPhone -> 50.dp
+            else -> 54.dp
+        }
+        val actionButtonFontSize = when {
+            isVeryShort -> 14.sp
+            isStandardPhone -> 15.sp
+            else -> 16.sp
+        }
+        val actionButtonIconSize = when {
+            isVeryShort -> 20.dp
+            isStandardPhone -> 22.dp
+            else -> 24.dp
+        }
 
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.TopCenter
         ) {
+            val scrollState = rememberScrollState()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 560.dp)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(horizontal = outerHorizontalPadding, vertical = outerVerticalPadding),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -739,7 +839,7 @@ fun DominoLobbyScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(if (isCompact) 10.dp else 16.dp))
+                Spacer(modifier = Modifier.height(sectionSpacing))
 
                 // Main Action Buttons (Placed directly below content in the single flow, matching screenshot)
                 if (selectedType == LobbyGameType.BOTS) {
@@ -830,8 +930,8 @@ fun DominoLobbyScreen(
                     }
                 }
 
-                // Generous bottom spacer so scrolling or system gestures never clip anything
-                Spacer(modifier = Modifier.height(if (isCompact) 28.dp else 36.dp))
+                // Bottom spacer with exact ~2mm (8dp) separation from bottom fixed navigation menu
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }
