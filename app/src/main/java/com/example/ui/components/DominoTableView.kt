@@ -478,33 +478,44 @@ fun DominoTableView(
                             boardTiles = state.boardTiles,
                             initialTileId = state.initialTileId,
                             baseUnit = 24f,
-                            maxTilesInRow = 3
+                            maxTilesInRow = 4,
+                            maxTilesInColumn = 3
                         )
                     }
 
-                    // Dynamically calculate scale so all tiles fit completely inside the table with safety margins
-                    val availW = (maxWidth.value - 32f).coerceAtLeast(60f)
-                    val availH = (maxHeight.value - 28f).coerceAtLeast(60f)
-                    val autoScale = minOf(
-                        availW / layout.boundingWidth,
-                        availH / layout.boundingHeight
-                    ).coerceIn(0.15f, 1.15f)
+                    // Sistema de Cámara Dinámica / Zoom Automático (Bounding Box Fitting)
+                    val camera = calculateBoundingBoxFittingCamera(
+                        contentWidth = layout.boundingWidth,
+                        contentHeight = layout.boundingHeight,
+                        viewportWidth = maxWidth.value,
+                        viewportHeight = maxHeight.value,
+                        paddingDp = 18f,
+                        minScale = 0.15f,
+                        maxScale = 1.0f
+                    )
 
-                    val scaledW = layout.boundingWidth * autoScale
-                    val scaledH = layout.boundingHeight * autoScale
+                    // Animación suave de transición de escala para una experiencia de juego visualmente atractiva
+                    val animatedScale by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = camera.scaleFactor,
+                        animationSpec = androidx.compose.animation.core.tween(durationMillis = 350, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        label = "camera_zoom"
+                    )
 
-                    // Outer Box has the scaled dimensions and is centered by BoxWithConstraints(Alignment.Center)
+                    val scaledW = layout.boundingWidth * animatedScale
+                    val scaledH = layout.boundingHeight * animatedScale
+
+                    // Contenedor centrado con las dimensiones escaladas
                     Box(
                         modifier = Modifier
                             .requiredSize(scaledW.dp, scaledH.dp)
                     ) {
-                        // Inner Box has the unscaled layout bounds, scaled via graphicsLayer anchored at (0, 0)
+                        // Contenedor interno que renderiza el tablero con origen fijo (0, 0) y escala animada
                         Box(
                             modifier = Modifier
                                 .requiredSize(layout.boundingWidth.dp, layout.boundingHeight.dp)
                                 .graphicsLayer {
-                                    scaleX = autoScale
-                                    scaleY = autoScale
+                                    scaleX = animatedScale
+                                    scaleY = animatedScale
                                     transformOrigin = TransformOrigin(0f, 0f)
                                 }
                         ) {
