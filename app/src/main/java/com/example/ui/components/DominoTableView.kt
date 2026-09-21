@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloat
@@ -11,11 +12,18 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -112,6 +120,171 @@ private val PlayerColors = listOf(
     Color(0xFFFBBF24), // Amber (Opponent 2)
     Color(0xFFA78BFA)  // Violet (Opponent 3)
 )
+
+private data class FireworkParticle(
+    val burstIndex: Int,
+    val angleRad: Float,
+    val distance: Float,
+    val color: Color,
+    val radiusPx: Float,
+    val isStar: Boolean
+)
+
+@Composable
+private fun CardFireworksEffect(
+    modifier: Modifier = Modifier,
+    isLarge: Boolean = false
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "fireworks_transition")
+    val animTime by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "anim_time"
+    )
+
+    // Precomputed particle trajectories
+    val particles = remember(isLarge) {
+        val list = mutableListOf<FireworkParticle>()
+        val colors = listOf(
+            Color(0xFFFFD700), // Gold
+            Color(0xFF38BDF8), // Electric Cyan
+            Color(0xFFF43F5E), // Coral Pink
+            Color(0xFF34D399), // Emerald
+            Color(0xFFFBBF24), // Amber
+            Color(0xFFA78BFA), // Lavender
+            Color(0xFFFFFFFF)  // Sparkle White
+        )
+
+        val burstCount = 5
+        val baseDistance = if (isLarge) 115f else 65f
+
+        for (burstIdx in 0 until burstCount) {
+            val particleCount = if (isLarge) 28 else 22
+            for (p in 0 until particleCount) {
+                val angle = (2 * PI * p / particleCount).toFloat() + (burstIdx * 0.45f)
+                val dist = baseDistance * (0.6f + (p % 5) * 0.12f)
+                val color = colors[(p + burstIdx) % colors.size]
+                val size = if (p % 4 == 0) 3.6f else 2.2f
+                val isStar = (p % 3 == 0)
+                list.add(
+                    FireworkParticle(
+                        burstIndex = burstIdx,
+                        angleRad = angle,
+                        distance = dist,
+                        color = color,
+                        radiusPx = size,
+                        isStar = isStar
+                    )
+                )
+            }
+        }
+        list
+    }
+
+    Canvas(
+        modifier = modifier.graphicsLayer { clip = false }
+    ) {
+        val centerX = size.width / 2f
+        val centerY = size.height / 2f
+
+        val burstStarts = listOf(0.00f, 0.18f, 0.36f, 0.54f, 0.72f)
+        val burstDuration = 0.42f
+
+        burstStarts.forEachIndexed { bIdx, bStart ->
+            val localTime = animTime - bStart
+            if (localTime in 0f..burstDuration) {
+                val p = (localTime / burstDuration).coerceIn(0f, 1f)
+                val easeOut = 1f - (1f - p) * (1f - p)
+                val alpha = (1f - p).coerceIn(0f, 1f)
+
+                val burstOffsetX = if (isLarge) {
+                    when (bIdx) {
+                        1 -> -80f
+                        2 -> 80f
+                        3 -> -40f
+                        4 -> 40f
+                        else -> 0f
+                    }
+                } else {
+                    when (bIdx) {
+                        1 -> -28f
+                        2 -> 28f
+                        3 -> -15f
+                        4 -> 15f
+                        else -> 0f
+                    }
+                }
+                val burstOffsetY = if (isLarge) {
+                    when (bIdx) {
+                        1, 2 -> -20f
+                        3, 4 -> 15f
+                        else -> 0f
+                    }
+                } else {
+                    when (bIdx) {
+                        1, 2 -> -12f
+                        3, 4 -> 12f
+                        else -> 0f
+                    }
+                }
+
+                val originX = centerX + burstOffsetX
+                val originY = centerY + burstOffsetY
+
+                // Expanding glowing shockwave ring
+                val ringRadius = (if (isLarge) 65f else 38f) * easeOut
+                drawCircle(
+                    color = Color.White.copy(alpha = (alpha * 0.45f).coerceIn(0f, 1f)),
+                    radius = ringRadius,
+                    center = androidx.compose.ui.geometry.Offset(originX, originY),
+                    style = Stroke(width = 3.5f * (1f - p))
+                )
+
+                // Draw bursting particles
+                particles.filter { it.burstIndex == bIdx }.forEach { part ->
+                    val curDist = part.distance * easeOut
+                    val gravity = 32f * p * p
+                    val px = originX + cos(part.angleRad) * curDist
+                    val py = originY + sin(part.angleRad) * curDist + gravity
+
+                    val flicker = 0.75f + 0.25f * sin(p * 20f + part.angleRad)
+                    val particleAlpha = (alpha * flicker).coerceIn(0f, 1f)
+
+                    if (part.isStar) {
+                        val s = part.radiusPx * (1f - 0.3f * p)
+                        drawLine(
+                            color = part.color.copy(alpha = particleAlpha),
+                            start = androidx.compose.ui.geometry.Offset(px - s * 1.5f, py),
+                            end = androidx.compose.ui.geometry.Offset(px + s * 1.5f, py),
+                            strokeWidth = 1.6f
+                        )
+                        drawLine(
+                            color = part.color.copy(alpha = particleAlpha),
+                            start = androidx.compose.ui.geometry.Offset(px, py - s * 1.5f),
+                            end = androidx.compose.ui.geometry.Offset(px, py + s * 1.5f),
+                            strokeWidth = 1.6f
+                        )
+                    } else {
+                        drawCircle(
+                            color = part.color.copy(alpha = particleAlpha),
+                            radius = part.radiusPx * (1f - 0.2f * p),
+                            center = androidx.compose.ui.geometry.Offset(px, py)
+                        )
+                        drawCircle(
+                            color = Color.White.copy(alpha = particleAlpha),
+                            radius = part.radiusPx * 0.4f,
+                            center = androidx.compose.ui.geometry.Offset(px, py)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 private data class PlayerFlightTrajectory(
     val startX: Float,
@@ -218,6 +391,40 @@ fun DominoTableView(
         ),
         label = "pulse_alpha"
     )
+
+    // Secuencia de victoria al terminar la ronda o partida:
+    // 1. La última ficha permanece visible en la mesa durante 2 segundos.
+    // 2. Tras 2 segundos, se dispara un efecto de fuegos artificiales en la tarjeta del jugador que ganó.
+    // 3. Tras el efecto de fuegos artificiales, se abre la ventana modal con los detalles de puntuación.
+    val isRoundFinished = state.status == TableGameStatus.ROUND_OVER || state.status == TableGameStatus.GAME_OVER
+    val currentWinnerIndex = state.roundWinnerIndex ?: state.winnerPlayerIndex ?: 0
+
+    var showFireworks by remember { mutableStateOf(false) }
+    var showRoundOverModal by remember { mutableStateOf(false) }
+    var celebratingWinnerIndex by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(state.status, state.roundWinnerIndex, state.winnerPlayerIndex, state.boardTiles.size) {
+        if (isRoundFinished) {
+            celebratingWinnerIndex = currentWinnerIndex
+            showFireworks = false
+            showRoundOverModal = false
+
+            // Paso 1: Permitir ver la última ficha jugada en la mesa durante 2 segundos completos
+            delay(2000L)
+
+            // Paso 2: Efecto de fuegos artificiales en la tarjeta de la persona que ganó
+            showFireworks = true
+            delay(2800L)
+
+            // Paso 3: Mostrar la pantalla modal de resumen de la ronda/partida
+            showFireworks = false
+            showRoundOverModal = true
+        } else {
+            showFireworks = false
+            showRoundOverModal = false
+            celebratingWinnerIndex = null
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -337,10 +544,12 @@ fun DominoTableView(
                 val actualIndex = state.players.indexOf(opponent)
                 val isTurn = state.currentTurnIndex == actualIndex && state.status == TableGameStatus.PLAYING
                 val isPartner = isTeamsMode && opponent.teamId == 0
+                val isWinnerCelebration = showFireworks && (celebratingWinnerIndex == actualIndex)
                 OpponentBadge(
                     player = opponent,
                     isTurn = isTurn,
                     isPartner = isPartner,
+                    isWinnerCelebration = isWinnerCelebration,
                     color = if (isPartner) Color(0xFF38BDF8) else PlayerColors.getOrElse(actualIndex) { Color(0xFF94A3B8) },
                     modifier = Modifier.weight(1f)
                 )
@@ -478,8 +687,8 @@ fun DominoTableView(
                             boardTiles = state.boardTiles,
                             initialTileId = state.initialTileId,
                             baseUnit = 24f,
-                            maxTilesInRow = 4,
-                            maxTilesInColumn = 3
+                            maxTilesInRow = 3,
+                            maxTilesInColumn = 2
                         )
                     }
 
@@ -555,18 +764,24 @@ fun DominoTableView(
 
         // BOTTOM: Human Player Deck (Modern Slate Card)
         humanPlayer?.let { player ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF0F172A).copy(alpha = 0.95f))
-                    .border(
-                        if (isHumanTurn) 1.8.dp else 1.2.dp,
-                        if (isHumanTurn) Color(0xFF10B981).copy(alpha = 0.85f) else Color(0xFF334155).copy(alpha = 0.7f),
-                        RoundedCornerShape(16.dp)
-                    )
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            val isHumanWinnerCelebration = showFireworks && (celebratingWinnerIndex == humanIndex)
+
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF0F172A).copy(alpha = 0.95f))
+                        .border(
+                            if (isHumanWinnerCelebration) 2.4.dp else if (isHumanTurn) 1.8.dp else 1.2.dp,
+                            if (isHumanWinnerCelebration) DominoGold else if (isHumanTurn) Color(0xFF10B981).copy(alpha = 0.85f) else Color(0xFF334155).copy(alpha = 0.7f),
+                            RoundedCornerShape(16.dp)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
                 // Player Name, Status, and Score Header Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -950,11 +1165,48 @@ fun DominoTableView(
                     }
                 }
             }
+
+            if (isHumanWinnerCelebration) {
+                CardFireworksEffect(
+                    modifier = Modifier.matchParentSize(),
+                    isLarge = true
+                )
+
+                // Cartel flotante de victoria para el usuario
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = DominoGold,
+                    shadowElevation = 10.dp,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-14).dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "¡GANASTE LA RONDA!",
+                            color = Color.Black,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
         }
     }
+}
 
-    // Modal Round / Game Over Overlay Dialog over full table view
-    if (state.status == TableGameStatus.ROUND_OVER || state.status == TableGameStatus.GAME_OVER) {
+    // Modal Round / Game Over Overlay Dialog over full table view (se muestra tras la secuencia de victoria)
+    if (showRoundOverModal && (state.status == TableGameStatus.ROUND_OVER || state.status == TableGameStatus.GAME_OVER)) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -964,7 +1216,12 @@ fun DominoTableView(
         ) {
             RoundOverOverlay(
                 state = state,
-                onNextRound = onNextRound
+                onNextRound = {
+                    showRoundOverModal = false
+                    showFireworks = false
+                    celebratingWinnerIndex = null
+                    onNextRound()
+                }
             )
         }
     }
@@ -976,93 +1233,161 @@ private fun OpponentBadge(
     player: DominoPlayer,
     isTurn: Boolean,
     isPartner: Boolean = false,
+    isWinnerCelebration: Boolean = false,
     color: Color,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = if (isTurn) color.copy(alpha = 0.22f) else Color(0xFF131D2F).copy(alpha = 0.88f),
-        border = BorderStroke(
-            width = if (isTurn) 1.8.dp else if (isPartner) 1.2.dp else 1.dp,
-            color = if (isTurn) color else if (isPartner) Color(0xFF38BDF8).copy(alpha = 0.65f) else Color(0xFF334155).copy(alpha = 0.7f)
+    val winnerPulse = rememberInfiniteTransition(label = "winner_pulse")
+    val winnerGlow by winnerPulse.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
         ),
-        shadowElevation = if (isTurn) 4.dp else 2.dp,
-        modifier = modifier
+        label = "winner_glow"
+    )
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 7.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = if (isWinnerCelebration) Color(0xFF1E293B) else if (isTurn) color.copy(alpha = 0.22f) else Color(0xFF131D2F).copy(alpha = 0.88f),
+            border = BorderStroke(
+                width = if (isWinnerCelebration) 2.2.dp else if (isTurn) 1.8.dp else if (isPartner) 1.2.dp else 1.dp,
+                color = if (isWinnerCelebration) DominoGold.copy(alpha = winnerGlow) else if (isTurn) color else if (isPartner) Color(0xFF38BDF8).copy(alpha = 0.65f) else Color(0xFF334155).copy(alpha = 0.7f)
+            ),
+            shadowElevation = if (isWinnerCelebration) 8.dp else if (isTurn) 4.dp else 2.dp,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Player name with status icon
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+            Column(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    imageVector = if (isPartner) Icons.Default.Groups else if (player.isBot) Icons.Default.SmartToy else Icons.Default.Person,
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (isPartner) "${player.name.replace(" (Bot)", "")} (Tu Pareja)" else player.name.replace(" (Bot)", ""),
-                    color = Color.White,
-                    fontWeight = if (isTurn || isPartner) FontWeight.Bold else FontWeight.SemiBold,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(modifier = Modifier.height(5.dp))
-
-            // Visible Tiles Area: Distinct Ivory Dominos & clear count pill
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Clear, large, bright ivory domino tiles
-                val tileCount = player.hand.size
-                val tileWidth = when {
-                    tileCount > 6 -> 8.5.dp
-                    tileCount > 4 -> 9.5.dp
-                    else -> 11.dp
-                }
-                val tileHeight = when {
-                    tileCount > 6 -> 15.dp
-                    tileCount > 4 -> 17.dp
-                    else -> 19.dp
-                }
-
+                // Player name with status icon
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(2.5.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    repeat(tileCount) {
-                        DominoTileBackView(
-                            width = tileWidth,
-                            height = tileHeight,
-                            isIvoryStyle = true
+                    Icon(
+                        imageVector = if (isPartner) Icons.Default.Groups else if (player.isBot) Icons.Default.SmartToy else Icons.Default.Person,
+                        contentDescription = null,
+                        tint = if (isWinnerCelebration) DominoGold else color,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isPartner) "${player.name.replace(" (Bot)", "")} (Tu Pareja)" else player.name.replace(" (Bot)", ""),
+                        color = Color.White,
+                        fontWeight = if (isWinnerCelebration || isTurn || isPartner) FontWeight.Bold else FontWeight.SemiBold,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                // Visible Tiles Area: Distinct Ivory Dominos & clear count pill
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val tileCount = player.hand.size
+                    if (tileCount == 0) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = DominoGold.copy(alpha = 0.2f),
+                            border = BorderStroke(0.8.dp, DominoGold)
+                        ) {
+                            Text(
+                                text = "0 fichas",
+                                color = DominoGold,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+                    } else {
+                        val tileWidth = when {
+                            tileCount > 6 -> 8.5.dp
+                            tileCount > 4 -> 9.5.dp
+                            else -> 11.dp
+                        }
+                        val tileHeight = when {
+                            tileCount > 6 -> 15.dp
+                            tileCount > 4 -> 17.dp
+                            else -> 19.dp
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            repeat(tileCount) {
+                                DominoTileBackView(
+                                    width = tileWidth,
+                                    height = tileHeight,
+                                    isIvoryStyle = true
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(5.dp))
+
+                    // Score / Points pill
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF0F172A).copy(alpha = 0.9f),
+                        border = BorderStroke(0.8.dp, DominoGold.copy(alpha = 0.5f))
+                    ) {
+                        Text(
+                            text = "${player.totalScore}p",
+                            color = DominoGold,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                         )
                     }
                 }
+            }
+        }
 
-                Spacer(modifier = Modifier.width(5.dp))
+        if (isWinnerCelebration) {
+            CardFireworksEffect(
+                modifier = Modifier.matchParentSize(),
+                isLarge = false
+            )
 
-                // Score / Points pill
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF0F172A).copy(alpha = 0.9f),
-                    border = BorderStroke(0.8.dp, DominoGold.copy(alpha = 0.5f))
+            // Cartel flotante "¡DOMINÓ!" sobre la tarjeta ganadora
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = DominoGold,
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-11).dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.EmojiEvents,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
-                        text = "${player.totalScore}p",
-                        color = DominoGold,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        text = "¡DOMINÓ!",
+                        color = Color.Black,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black
                     )
                 }
             }

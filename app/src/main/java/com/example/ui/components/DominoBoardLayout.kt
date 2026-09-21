@@ -162,7 +162,8 @@ private class DominoSnakeBranch(
     private val maxTilesInColumn: Int,
     initialDirection: BoardDirection,
     private val isLeftBranch: Boolean,
-    initialTile: PlacedBoardTile
+    initialTile: PlacedBoardTile,
+    private val maxHorizontalSpan: Float = maxTilesInRow * wLong
 ) {
     var currentDirection: BoardDirection = initialDirection
         private set
@@ -172,30 +173,34 @@ private class DominoSnakeBranch(
 
     var countInCurrentSegment: Int = 0
 
+    private var nextHorizontalDir: BoardDirection = if (isLeftBranch) BoardDirection.RIGHT else BoardDirection.LEFT
+
     /**
-     * Secuencia estricta de giros solicitada para el tablero:
+     * Secuencia continua y automática de giros en serpiente (boustrophedon):
      * - Rama Izquierda (Tail):
-     *     Segmento 0: Avanza horizontal hacia LEFT
-     *     Giro 1: Gira 90° hacia UP (vertical arriba)
-     *     Giro 2: Gira 90° hacia RIGHT (horizontal derecha y continúa horizontal)
+     *     Avanza LEFT -> Gira UP -> Avanza RIGHT -> Gira UP -> Avanza LEFT -> Gira UP... (nunca se desborda)
      * - Rama Derecha (Head):
-     *     Segmento 0: Avanza horizontal hacia RIGHT
-     *     Giro 1: Gira 90° hacia DOWN (vertical abajo)
-     *     Giro 2: Gira 90° hacia LEFT (horizontal izquierda y continúa horizontal)
+     *     Avanza RIGHT -> Gira DOWN -> Avanza LEFT -> Gira DOWN -> Avanza RIGHT -> Gira DOWN...
      */
     fun getNextDirection(currentDir: BoardDirection): BoardDirection {
         return if (isLeftBranch) {
             when (currentDir) {
-                BoardDirection.LEFT -> BoardDirection.UP
-                BoardDirection.UP -> BoardDirection.RIGHT
-                BoardDirection.RIGHT -> BoardDirection.RIGHT // Una vez que gira a RIGHT continúa horizontal hacia la derecha
+                BoardDirection.LEFT, BoardDirection.RIGHT -> BoardDirection.UP
+                BoardDirection.UP -> {
+                    val nxt = nextHorizontalDir
+                    nextHorizontalDir = if (nxt == BoardDirection.RIGHT) BoardDirection.LEFT else BoardDirection.RIGHT
+                    nxt
+                }
                 BoardDirection.DOWN -> BoardDirection.LEFT
             }
         } else {
             when (currentDir) {
-                BoardDirection.RIGHT -> BoardDirection.DOWN
-                BoardDirection.DOWN -> BoardDirection.LEFT
-                BoardDirection.LEFT -> BoardDirection.LEFT // Una vez que gira a LEFT continúa horizontal hacia la izquierda
+                BoardDirection.RIGHT, BoardDirection.LEFT -> BoardDirection.DOWN
+                BoardDirection.DOWN -> {
+                    val nxt = nextHorizontalDir
+                    nextHorizontalDir = if (nxt == BoardDirection.LEFT) BoardDirection.RIGHT else BoardDirection.LEFT
+                    nxt
+                }
                 BoardDirection.UP -> BoardDirection.RIGHT
             }
         }
@@ -205,13 +210,32 @@ private class DominoSnakeBranch(
      * Coloca la siguiente ficha en contacto físico directo con la ficha anterior (lastPlaced).
      */
     fun placeNextTile(tile: DominoTile, index: Int): PlacedBoardTile {
-        val isHorizontal = (currentDirection == BoardDirection.RIGHT || currentDirection == BoardDirection.LEFT)
-        val limitForSegment = if (isHorizontal) maxTilesInRow else maxTilesInColumn
-
         var isTurning = false
         val oldDir = currentDirection
 
-        if (countInCurrentSegment >= limitForSegment) {
+        // En el dominó real, una ficha DOBLE se coloca SIEMPRE atravesada / perpendicular al extremo
+        // actual de avance, nunca gira una esquina en L. El giro lo ejecuta la siguiente ficha no doble.
+        // Además, al avanzar horizontalmente (RIGHT o LEFT), la fila debe recorrer todo el ancho del
+        // tablero hasta el extremo antes de girar hacia arriba/abajo, evitando giros prematuros a mitad de tablero.
+        val shouldTurn = if (tile.isDouble) {
+            false
+        } else {
+            when (currentDirection) {
+                BoardDirection.LEFT -> {
+                    // Avanza hacia la izquierda hasta llegar al extremo izquierdo del tablero
+                    (lastPlaced.x <= -maxHorizontalSpan + 1f) || (countInCurrentSegment >= maxTilesInRow * 2)
+                }
+                BoardDirection.RIGHT -> {
+                    // Avanza hacia la derecha hasta llegar al extremo derecho del tablero
+                    ((lastPlaced.x + lastPlaced.width) >= maxHorizontalSpan - 1f) || (countInCurrentSegment >= maxTilesInRow * 2)
+                }
+                BoardDirection.UP, BoardDirection.DOWN -> {
+                    countInCurrentSegment >= maxTilesInColumn
+                }
+            }
+        }
+
+        if (shouldTurn) {
             val nextDir = getNextDirection(currentDirection)
             if (nextDir != currentDirection) {
                 isTurning = true
@@ -220,7 +244,10 @@ private class DominoSnakeBranch(
             }
         }
 
-        // Fichas dobles: perpendiculares al avance. Fichas normales: paralelas al avance.
+        // Fichas dobles: perpendiculares al avance.
+        // Si la cadena avanza horizontalmente (RIGHT o LEFT) -> el doble se acuesta VERTICAL encima del extremo.
+        // Si la cadena avanza verticalmente (UP o DOWN) -> el doble se acuesta HORIZONTAL encima del extremo.
+        // Fichas normales: paralelas a la dirección de avance.
         val placeVertical = if (tile.isDouble) {
             (currentDirection == BoardDirection.RIGHT || currentDirection == BoardDirection.LEFT)
         } else {
@@ -337,8 +364,8 @@ fun calculateDominoSnakeLayout(
     boardTiles: List<DominoTile>,
     initialTileId: Int? = null,
     baseUnit: Float = 24f, // dp: ancho corto de ficha
-    maxTilesInRow: Int = 4,
-    maxTilesInColumn: Int = 3
+    maxTilesInRow: Int = 3,
+    maxTilesInColumn: Int = 2
 ): DominoBoardLayout {
     if (boardTiles.isEmpty()) {
         return DominoBoardLayout(
