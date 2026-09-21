@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Anotador Domino"
+rootProject.name = "Dominotes"
 
 include(":app")

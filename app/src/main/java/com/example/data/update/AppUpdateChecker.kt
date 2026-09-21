@@ -35,7 +35,7 @@ class AppUpdateChecker(private val context: Context) {
         private const val GITHUB_RELEASE_API =
             "https://api.github.com/repos/adandavid98/Dominotes/releases/latest"
         const val DEFAULT_DOWNLOAD_URL =
-            "https://github.com/adandavid98/Dominotes/releases/latest/download/AnotadorDomino.apk"
+            "https://github.com/adandavid98/Dominotes/releases/latest/download/Dominotes.apk"
         private const val VERSION_JSON_URL =
             "https://github.com/adandavid98/Dominotes/releases/latest/download/version.json"
     }

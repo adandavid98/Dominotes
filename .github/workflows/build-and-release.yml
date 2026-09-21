@@ -71,6 +71,8 @@ jobs:
       - name: Prepare APK Artifacts
         run: |
           mkdir -p release-artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Dominotes.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Dominotes-v${VERSION_NAME}.apk
           cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/AnotadorDomino.apk
           cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/AnotadorDomino-v${VERSION_NAME}.apk
           echo "{\"versionName\": \"${VERSION_NAME}\", \"versionCode\": ${VERSION_CODE}, \"buildNumber\": ${{ github.run_number }}, \"commitSha\": \"${{ github.sha }}\", \"timestamp\": $(date +%s%3N), \"publishedAt\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"}" > release-artifacts/version.json
@@ -78,8 +80,10 @@ jobs:
       - name: Upload APK as Workflow Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AnotadorDomino-apk
+          name: Dominotes-apk
           path: |
+            release-artifacts/Dominotes.apk
+            release-artifacts/Dominotes-v${{ env.VERSION_NAME }}.apk
             release-artifacts/AnotadorDomino.apk
             release-artifacts/AnotadorDomino-v${{ env.VERSION_NAME }}.apk
             release-artifacts/version.json
@@ -96,11 +100,14 @@ jobs:
             - 🏗️ **Build:** `${{ github.run_number }}`
             
             📲 **Descargas directas para Android:**
-            - [📥 Descargar AnotadorDomino.apk](https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION_NAME }}/AnotadorDomino.apk)
-            - [📥 Descargar AnotadorDomino-v${{ env.VERSION_NAME }}.apk](https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION_NAME }}/AnotadorDomino-v${{ env.VERSION_NAME }}.apk)
+            - [📥 Descargar Dominotes.apk](https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION_NAME }}/Dominotes.apk)
+            - [📥 Descargar Dominotes-v${{ env.VERSION_NAME }}.apk](https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION_NAME }}/Dominotes-v${{ env.VERSION_NAME }}.apk)
+            - [📥 Descargar AnotadorDomino.apk (compatibilidad)](https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION_NAME }}/AnotadorDomino.apk)
           draft: false
           prerelease: false
           files: |
+            release-artifacts/Dominotes.apk
+            release-artifacts/Dominotes-v${{ env.VERSION_NAME }}.apk
             release-artifacts/AnotadorDomino.apk
             release-artifacts/AnotadorDomino-v${{ env.VERSION_NAME }}.apk
             release-artifacts/version.json
@@ -114,10 +121,13 @@ jobs:
             🚀 **Versión ${{ env.VERSION_NAME }} de Dominotes (Build ${{ env.VERSION_CODE }})**
             
             📲 **Descarga directa:**
-            - [📥 Descargar AnotadorDomino.apk](https://github.com/${{ github.repository }}/releases/download/latest/AnotadorDomino.apk)
+            - [📥 Descargar Dominotes.apk](https://github.com/${{ github.repository }}/releases/download/latest/Dominotes.apk)
+            - [📥 Descargar AnotadorDomino.apk (compatibilidad)](https://github.com/${{ github.repository }}/releases/download/latest/AnotadorDomino.apk)
           draft: false
           prerelease: false
           files: |
+            release-artifacts/Dominotes.apk
+            release-artifacts/Dominotes-v${{ env.VERSION_NAME }}.apk
             release-artifacts/AnotadorDomino.apk
             release-artifacts/AnotadorDomino-v${{ env.VERSION_NAME }}.apk
             release-artifacts/version.json
