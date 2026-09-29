@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.dominopuntos.wvnqk"
     minSdk = 24
     targetSdk = 36
-    versionCode = 26
-    versionName = "1.8.7"
+    versionCode = 29
+    versionName = "1.9.0"
     buildConfigField("long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -137,5 +137,5 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
-  "ksp"(libs.moshi.kotlin.codegen)
+  // "ksp"(libs.moshi.kotlin.codegen)
 }

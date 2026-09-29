@@ -158,8 +158,9 @@ fun calculateTilePips(
 private class DominoSnakeBranch(
     private val wShort: Float,
     private val wLong: Float,
-    private val maxTilesInRow: Int = 6,
+    private val maxTilesInRow: Int = 5,
     private val maxTilesInColumn: Int = 2,
+    private val maxTilesInFirstSegment: Int = 2,
     initialDirection: BoardDirection,
     private val isLeftBranch: Boolean,
     initialTile: PlacedBoardTile
@@ -214,13 +215,11 @@ private class DominoSnakeBranch(
         var isTurning = false
         val oldDir = currentDirection
 
-        // Límite estricto de fichas horizontales: máximo 6 fichas horizontal incluyendo dobles de por medio.
-        // En el primer segmento saliendo del ancla, como el ancla (opener) ya cuenta como 1 ficha horizontal,
-        // la rama coloca hasta (maxTilesInRow - 1) fichas (5 fichas). Al llegar a la 6ª ficha de la rama
-        // (ejemplo: ficha 5/6, que es la 7ª ficha en la mesa), se alcanza el límite y realiza el giro de 90°
-        // hacia abajo (Head / RIGHT) o hacia arriba (Tail / LEFT).
-        // En los segmentos horizontales posteriores, no hay ancla y se admiten exactamente maxTilesInRow (6 fichas).
-        val maxAllowedHorizontal = if (isFirstSegment) (maxTilesInRow - 1).coerceAtLeast(1) else maxTilesInRow
+        // Límite estricto de fichas horizontales: máximo 5 fichas horizontal en la mesa.
+        // En el primer segmento saliendo del ancla, usa maxTilesInFirstSegment para no desbordar
+        // la fila inicial (que contiene el ancla en el centro).
+        // En los segmentos horizontales posteriores, cada fila admite maxTilesInRow (5 fichas).
+        val maxAllowedHorizontal = if (isFirstSegment) maxTilesInFirstSegment else maxTilesInRow
 
         val shouldTurn = when (currentDirection) {
             BoardDirection.LEFT, BoardDirection.RIGHT -> {
@@ -406,6 +405,14 @@ fun calculateDominoSnakeLayout(
     )
     placed.add(initialPlaced)
 
+    // En la primera fila (que contiene el ancla en el centro):
+    // La rama derecha avanza hasta (maxTilesInRow / 2) fichas (3 fichas para maxTilesInRow = 6).
+    // La rama izquierda avanza hasta (maxTilesInRow / 2) fichas (3 fichas).
+    // De este modo, la fila central tiene exactamente 6 fichas y alinea PERFECTAMENTE
+    // sus giros verticales en x_min y x_max con las filas superior e inferior,
+    // eliminando cualquier hueco o giro prematuro.
+    val maxFirstSegment = (maxTilesInRow / 2).coerceAtLeast(1)
+
     // 2. RAMA DERECHA (HEAD): Desde (openerIndex + 1) hasta el final de boardTiles
     if (openerIndex + 1 < boardTiles.size) {
         val headBranch = DominoSnakeBranch(
@@ -413,6 +420,7 @@ fun calculateDominoSnakeLayout(
             wLong = wLong,
             maxTilesInRow = maxTilesInRow,
             maxTilesInColumn = maxTilesInColumn,
+            maxTilesInFirstSegment = maxFirstSegment,
             initialDirection = BoardDirection.RIGHT,
             isLeftBranch = false,
             initialTile = initialPlaced
@@ -431,6 +439,7 @@ fun calculateDominoSnakeLayout(
             wLong = wLong,
             maxTilesInRow = maxTilesInRow,
             maxTilesInColumn = maxTilesInColumn,
+            maxTilesInFirstSegment = maxFirstSegment,
             initialDirection = BoardDirection.LEFT,
             isLeftBranch = true,
             initialTile = initialPlaced

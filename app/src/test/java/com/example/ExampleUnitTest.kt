@@ -407,20 +407,28 @@ class ExampleUnitTest {
   }
 
   @Test
-  fun testSixHorizontalTilesLimitAndTwoVerticalTurn() {
-    // Opener [6|6] + 5 fichas = 6 fichas horizontales en la primera fila.
-    // La 6ª ficha de la rama (7ª de la mesa) gira 90° hacia abajo.
-    // Toma 2 fichas verticalmente y luego gira hacia la izquierda por 6 fichas.
-    val opener = DominoTile(6, 6, 1)
-    val rightTiles = (1..16).map { i ->
-      DominoTile(
-        id = 10 + i,
-        left = 6,
-        right = if (i == 3) 6 else 5 // incluye una ficha doble en i=3
-      )
-    }
+  fun testSixHorizontalTilesLimitAndAlignedSerpentineSnake() {
+    // Opener [6|6] en el centro.
+    // 3 fichas a la izquierda y 3 fichas a la derecha = fila de 6 fichas perfecta sin huecos.
+    // La 4ª ficha gira verticalmente (90° hacia arriba en la izquierda, 90° hacia abajo en la derecha).
+    // Ambas ramas giran verticalmente en los mismos límites horizontales sin dejar espacios vacíos.
+    val opener = DominoTile(6, 6, 100)
+    val leftTiles = listOf(
+      DominoTile(1, 3, 10),
+      DominoTile(2, 1, 11), // 4ª ficha: gira hacia arriba
+      DominoTile(5, 2, 12),
+      DominoTile(5, 5, 13),
+      DominoTile(6, 5, 14)
+    )
+    val rightTiles = listOf(
+      DominoTile(6, 4, 20),
+      DominoTile(4, 4, 21),
+      DominoTile(4, 1, 22),
+      DominoTile(1, 1, 23), // 4ª ficha: gira hacia abajo
+      DominoTile(1, 3, 24)
+    )
 
-    val board = listOf(opener) + rightTiles
+    val board = leftTiles + listOf(opener) + rightTiles
     val layout = calculateDominoSnakeLayout(
       boardTiles = board,
       initialTileId = opener.id,
@@ -428,23 +436,16 @@ class ExampleUnitTest {
       maxTilesInColumn = 2
     )
 
-    assertEquals(17, layout.tiles.size)
-    val openerPlaced = layout.tiles.first()
+    assertEquals(11, layout.tiles.size)
+    val openerPlaced = layout.tiles.first { it.tile.id == 100 }
 
-    // Ficha 6 de la rama (índice 6 en layout.tiles): gira hacia abajo 90 grados
-    val turnTile1 = layout.tiles[6]
-    assertTrue("La 6ª ficha de la rama debe girar hacia abajo", turnTile1.y > openerPlaced.y)
-    assertTrue("La 6ª ficha de la rama debe ser vertical", turnTile1.isVertical)
+    // En la rama derecha: la 4ª ficha (id 23) gira hacia abajo
+    val rightTurn = layout.tiles.first { it.tile.id == 23 }
+    assertTrue("La 4ª ficha derecha debe girar hacia abajo", rightTurn.y > openerPlaced.y)
 
-    // Ficha 7 de la rama (índice 7 en layout.tiles): continúa hacia abajo (espacio de 2 fichas vertical)
-    val turnTile2 = layout.tiles[7]
-    assertTrue("La 7ª ficha de la rama debe continuar hacia abajo (espacio de 2 fichas)", turnTile2.y > turnTile1.y)
-    assertTrue("La 7ª ficha de la rama debe ser vertical", turnTile2.isVertical)
-
-    // Ficha 8 de la rama (índice 8 en layout.tiles): gira hacia la izquierda horizontalmente
-    val horizRow2Tile1 = layout.tiles[8]
-    assertFalse("La 8ª ficha debe girar horizontalmente hacia la izquierda", horizRow2Tile1.isVertical)
-    assertTrue("La 8ª ficha debe avanzar hacia la izquierda", horizRow2Tile1.x < turnTile2.x)
+    // En la rama izquierda: la 4ª ficha (id 11) gira hacia arriba
+    val leftTurn = layout.tiles.first { it.tile.id == 11 }
+    assertTrue("La 4ª ficha izquierda debe girar hacia arriba", leftTurn.y < openerPlaced.y)
   }
 
   @Test
@@ -457,7 +458,7 @@ class ExampleUnitTest {
     val t3 = DominoTile(2, 6, 103)
     val t4 = DominoTile(6, 0, 104)
     val t5 = DominoTile(0, 5, 105)
-    val t6 = DominoTile(5, 6, 106) // Ficha 5/6 que DEBE girar 90 grados hacia abajo
+    val t6 = DominoTile(5, 6, 106)
 
     val board = listOf(opener, t1, t2, t3, t4, t5, t6)
     val layout = calculateDominoSnakeLayout(
@@ -468,12 +469,12 @@ class ExampleUnitTest {
     )
 
     assertEquals(7, layout.tiles.size)
-    val placed56 = layout.tiles.first { it.tile.id == 106 }
     val placedOpener = layout.tiles.first { it.tile.id == 100 }
+    val placedTurn = layout.tiles.first { it.tile.id == 104 }
 
-    // La ficha 5/6 debe girar hacia abajo 90 grados
-    assertTrue("La ficha 5/6 debe quedar orientada verticalmente apuntando hacia abajo", placed56.isVertical)
-    assertTrue("La coordenada Y de la ficha 5/6 debe estar abajo de la fila horizontal del opener", placed56.y > placedOpener.y)
+    // Al llegar a 3 fichas en la rama, la 4ª ficha (id 104) gira hacia abajo
+    assertTrue("La 4ª ficha debe quedar orientada verticalmente apuntando hacia abajo", placedTurn.isVertical)
+    assertTrue("La coordenada Y debe estar abajo de la fila del opener", placedTurn.y > placedOpener.y)
   }
 
   @Test

@@ -698,35 +698,42 @@ fun DominoTableView(
                         )
                     }
 
-                    // Sistema de Cámara Dinámica / Zoom Automático (Bounding Box Fitting)
+                    // Sistema de Cámara Dinámica / Centrado Absoluto en Mesa
                     val camera = calculateBoundingBoxFittingCamera(
                         contentWidth = layout.boundingWidth,
                         contentHeight = layout.boundingHeight,
                         viewportWidth = maxWidth.value,
                         viewportHeight = maxHeight.value,
-                        paddingDp = 12f,
-                        minScale = 0.15f,
+                        paddingDp = 16f,
+                        minScale = 0.2f,
                         maxScale = 1.0f
                     )
 
-                    // Animación suave de transición de escala para una experiencia de juego visualmente atractiva
+                    // Animación suave de escala y centrado para una experiencia visual equilibrada y nítida
                     val animatedScale by androidx.compose.animation.core.animateFloatAsState(
                         targetValue = camera.scaleFactor,
                         animationSpec = androidx.compose.animation.core.tween(durationMillis = 350, easing = androidx.compose.animation.core.FastOutSlowInEasing),
                         label = "camera_zoom"
                     )
+                    val animatedOffsetX by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = camera.offsetX,
+                        animationSpec = androidx.compose.animation.core.tween(durationMillis = 350, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        label = "camera_x"
+                    )
+                    val animatedOffsetY by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = camera.offsetY,
+                        animationSpec = androidx.compose.animation.core.tween(durationMillis = 350, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                        label = "camera_y"
+                    )
 
-                    val scaledW = layout.boundingWidth * animatedScale
-                    val scaledH = layout.boundingHeight * animatedScale
-
-                    // Contenedor centrado con las dimensiones escaladas
+                    // Contenedor principal de la mesa que garantiza centrado exacto y márgenes simétricos
                     Box(
-                        modifier = Modifier
-                            .requiredSize(scaledW.dp, scaledH.dp)
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        // Contenedor interno que renderiza el tablero con origen fijo (0, 0) y escala animada
+                        // Contenedor del tablero posicionado con precisión en (offsetX, offsetY) y escala animada
                         Box(
                             modifier = Modifier
+                                .offset(animatedOffsetX.dp, animatedOffsetY.dp)
                                 .requiredSize(layout.boundingWidth.dp, layout.boundingHeight.dp)
                                 .graphicsLayer {
                                     scaleX = animatedScale
