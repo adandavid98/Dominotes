@@ -405,4 +405,95 @@ class ExampleUnitTest {
     assertTrue("Scaled width ($scaledW) must fit inside availW ($availW)", scaledW <= availW + 0.001f)
     assertTrue("Scaled height ($scaledH) must fit inside availH ($availH)", scaledH <= availH + 0.001f)
   }
+
+  @Test
+  fun testSixHorizontalTilesLimitAndTwoVerticalTurn() {
+    // Opener [6|6] + 5 fichas = 6 fichas horizontales en la primera fila.
+    // La 6ª ficha de la rama (7ª de la mesa) gira 90° hacia abajo.
+    // Toma 2 fichas verticalmente y luego gira hacia la izquierda por 6 fichas.
+    val opener = DominoTile(6, 6, 1)
+    val rightTiles = (1..16).map { i ->
+      DominoTile(
+        id = 10 + i,
+        left = 6,
+        right = if (i == 3) 6 else 5 // incluye una ficha doble en i=3
+      )
+    }
+
+    val board = listOf(opener) + rightTiles
+    val layout = calculateDominoSnakeLayout(
+      boardTiles = board,
+      initialTileId = opener.id,
+      maxTilesInRow = 6,
+      maxTilesInColumn = 2
+    )
+
+    assertEquals(17, layout.tiles.size)
+    val openerPlaced = layout.tiles.first()
+
+    // Ficha 6 de la rama (índice 6 en layout.tiles): gira hacia abajo 90 grados
+    val turnTile1 = layout.tiles[6]
+    assertTrue("La 6ª ficha de la rama debe girar hacia abajo", turnTile1.y > openerPlaced.y)
+    assertTrue("La 6ª ficha de la rama debe ser vertical", turnTile1.isVertical)
+
+    // Ficha 7 de la rama (índice 7 en layout.tiles): continúa hacia abajo (espacio de 2 fichas vertical)
+    val turnTile2 = layout.tiles[7]
+    assertTrue("La 7ª ficha de la rama debe continuar hacia abajo (espacio de 2 fichas)", turnTile2.y > turnTile1.y)
+    assertTrue("La 7ª ficha de la rama debe ser vertical", turnTile2.isVertical)
+
+    // Ficha 8 de la rama (índice 8 en layout.tiles): gira hacia la izquierda horizontalmente
+    val horizRow2Tile1 = layout.tiles[8]
+    assertFalse("La 8ª ficha debe girar horizontalmente hacia la izquierda", horizRow2Tile1.isVertical)
+    assertTrue("La 8ª ficha debe avanzar hacia la izquierda", horizRow2Tile1.x < turnTile2.x)
+  }
+
+  @Test
+  fun testUserScenario_56TurnsDownAt90Degrees() {
+    // Escenario exacto del usuario:
+    // Salida mula [4|4] seguida de [4|2], [2|2], [2|6], [6|0], [0|5], [5|6]
+    val opener = DominoTile(4, 4, 100) // Opener [4|4] (mula)
+    val t1 = DominoTile(4, 2, 101)
+    val t2 = DominoTile(2, 2, 102) // Doble [2|2]
+    val t3 = DominoTile(2, 6, 103)
+    val t4 = DominoTile(6, 0, 104)
+    val t5 = DominoTile(0, 5, 105)
+    val t6 = DominoTile(5, 6, 106) // Ficha 5/6 que DEBE girar 90 grados hacia abajo
+
+    val board = listOf(opener, t1, t2, t3, t4, t5, t6)
+    val layout = calculateDominoSnakeLayout(
+      boardTiles = board,
+      initialTileId = opener.id,
+      maxTilesInRow = 6,
+      maxTilesInColumn = 2
+    )
+
+    assertEquals(7, layout.tiles.size)
+    val placed56 = layout.tiles.first { it.tile.id == 106 }
+    val placedOpener = layout.tiles.first { it.tile.id == 100 }
+
+    // La ficha 5/6 debe girar hacia abajo 90 grados
+    assertTrue("La ficha 5/6 debe quedar orientada verticalmente apuntando hacia abajo", placed56.isVertical)
+    assertTrue("La coordenada Y de la ficha 5/6 debe estar abajo de la fila horizontal del opener", placed56.y > placedOpener.y)
+  }
+
+  @Test
+  fun testBotRosterHundredsOfBotsAndRandomness() {
+    val sample1 = com.example.data.domino.BotRoster.getRandomBots(count = 3, isTeams = true)
+    val sample2 = com.example.data.domino.BotRoster.getRandomBots(count = 3, isTeams = true)
+
+    assertEquals(3, sample1.size)
+    assertEquals(3, sample2.size)
+
+    // IDs and names are unique
+    val allNames = sample1.map { it.name }.toSet()
+    assertEquals(3, allNames.size)
+
+    // Verify all capabilities are valid
+    for (bot in sample1 + sample2) {
+      assertNotNull(bot.capability)
+      assertTrue(bot.name.isNotBlank())
+      assertTrue(bot.originCity.isNotBlank())
+      assertTrue(bot.avatarEmoji.isNotBlank())
+    }
+  }
 }

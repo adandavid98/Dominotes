@@ -1,5 +1,7 @@
 package com.example.data.domino
 
+import com.example.data.rules.RegionalRuleSet
+
 enum class TableGameStatus {
     WAITING_START,
     PLAYING,
@@ -19,7 +21,10 @@ data class DominoPlayer(
     val hand: List<DominoTile> = emptyList(),
     val totalScore: Int = 0,
     val avatarColorIndex: Int = 0,
-    val teamId: Int = 0 // 0 = Team Nosotros / Equipo 1, 1 = Team Rivales / Equipo 2
+    val teamId: Int = 0, // 0 = Team Nosotros / Equipo 1, 1 = Team Rivales / Equipo 2
+    val capability: BotCapability = BotCapability.EQUILIBRADO_CLASICO,
+    val originCity: String = "",
+    val avatarEmoji: String = "🎲"
 ) {
     val remainingTilePoints: Int get() = hand.sumOf { it.totalPoints }
 }
@@ -39,9 +44,11 @@ data class DominoTableState(
     val roundWinnerIndex: Int? = null,
     val pointsWonThisRound: Int = 0,
     val isBlocked: Boolean = false,
+    val isCapicua: Boolean = false,
     val roomCode: String? = null,
     val initialTileId: Int? = null,
     val playMode: DominoGamePlayMode = DominoGamePlayMode.PAREJAS_2V2,
+    val regionalRules: RegionalRuleSet = RegionalRuleSet.VENEZUELA,
     val teamScores: List<Int> = listOf(0, 0), // Team 0 and Team 1 scores
     val targetPlayerCount: Int = 4,
     val isWaitingForGuests: Boolean = false,

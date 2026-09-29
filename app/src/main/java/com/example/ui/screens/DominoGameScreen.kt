@@ -31,12 +31,16 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Games
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PostAdd
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Speed
@@ -84,15 +88,20 @@ import com.example.ui.ActiveGameState
 import com.example.ui.DominoViewModel
 import com.example.ui.MainAppTab
 import com.example.ui.components.AddRoundDialog
+import com.example.ui.components.BotLoadingDialog
 import com.example.ui.components.DominoTableView
 import com.example.ui.components.DominoTileView
 import com.example.ui.components.FriendsRoomDialog
 import com.example.ui.components.GoogleAccountDialog
 import com.example.ui.components.NewGameDialog
+import com.example.ui.components.RegionalRulesDialog
 import com.example.ui.components.RoundsTableView
 import com.example.ui.components.ScoreCard
+import com.example.ui.components.SkinsDialog
 import com.example.ui.components.TrancaCalculatorDialog
 import com.example.ui.components.VictoryDialog
+import com.example.ui.screens.DominoPuzzlesScreen
+import com.example.ui.screens.PlayerStatsScreen
 import com.example.ui.theme.DominoGold
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -109,6 +118,15 @@ fun DominoGameScreen(
     val selectedTile by viewModel.selectedTile.collectAsStateWithLifecycle()
     val availableUpdate by viewModel.availableUpdate.collectAsStateWithLifecycle()
 
+    val tileSkin by viewModel.tileSkin.collectAsStateWithLifecycle()
+    val tableMat by viewModel.tableMat.collectAsStateWithLifecycle()
+    val regionalRules by viewModel.regionalRules.collectAsStateWithLifecycle()
+    val isSoundMuted by viewModel.isSoundMuted.collectAsStateWithLifecycle()
+    val activeReactionBubble by viewModel.activeReactionBubble.collectAsStateWithLifecycle()
+    val playerStats by viewModel.playerStats.collectAsStateWithLifecycle()
+    val isLoadingBots by viewModel.isLoadingBots.collectAsStateWithLifecycle()
+    val loadingBotsList by viewModel.loadingBotsList.collectAsStateWithLifecycle()
+
     val highestScore = state.scores.maxOrNull() ?: 0
 
     Scaffold(
@@ -117,20 +135,28 @@ fun DominoGameScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        DominoTileView(topPips = 4, bottomPips = 5, width = 24.dp, height = 40.dp)
+                        DominoTileView(topPips = 4, bottomPips = 5, tileSkin = tileSkin, width = 24.dp, height = 40.dp)
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = if (state.currentTab == MainAppTab.SCORER) state.title else "Mesa de Dominó",
+                                text = when (state.currentTab) {
+                                    MainAppTab.SCORER -> state.title
+                                    MainAppTab.PLAY_DOMINO -> "Mesa de Dominó"
+                                    MainAppTab.PUZZLES -> "Desafíos y Puzzles"
+                                    MainAppTab.STATS -> "Perfil y Estadísticas"
+                                },
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = if (state.currentTab == MainAppTab.SCORER)
-                                    "Meta: ${state.targetScore} pts • ${state.gameMode.displayName}"
-                                else if (tableState.roomCode != null)
-                                    "Sala Online: #${tableState.roomCode} • Meta ${tableState.targetScore} pts"
-                                else
-                                    "Partida vs Bots IA • Meta ${tableState.targetScore} pts",
+                                text = when (state.currentTab) {
+                                    MainAppTab.SCORER -> "Meta: ${state.targetScore} pts • ${state.gameMode.displayName}"
+                                    MainAppTab.PLAY_DOMINO -> if (tableState.roomCode != null)
+                                        "Sala Online: #${tableState.roomCode} • Meta ${tableState.targetScore} pts"
+                                    else
+                                        "Modo ${regionalRules.countryName} ${regionalRules.flagEmoji} • Meta ${tableState.targetScore} pts"
+                                    MainAppTab.PUZZLES -> "Reto diario y tácticas de tranque"
+                                    MainAppTab.STATS -> "${playerStats.playerRankTitle} • ${playerStats.overallWinRatePercent}% efectividad"
+                                },
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -203,7 +229,8 @@ fun DominoGameScreen(
                                     viewModel.startNewDominoTableGame(
                                         roomCode = tableState.roomCode,
                                         botCount = botCount,
-                                        targetScore = tableState.targetScore
+                                        targetScore = tableState.targetScore,
+                                        playMode = tableState.playMode
                                     )
                                 },
                                 modifier = Modifier.testTag("btn_restart_table")
@@ -276,6 +303,26 @@ fun DominoGameScreen(
                                     modifier = Modifier.testTag("menu_reset_game")
                                 )
                                 DropdownMenuItem(
+                                    text = { Text("Personalizar Fichas y Mesa") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.setShowSkinsDialog(true)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Palette, contentDescription = null, tint = DominoGold)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Reglas Regionales") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.setShowRulesDialog(true)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Public, contentDescription = null, tint = DominoGold)
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("Calculadora de Tranca") },
                                     onClick = {
                                         showMenu = false
@@ -327,12 +374,34 @@ fun DominoGameScreen(
                     selected = state.currentTab == MainAppTab.PLAY_DOMINO,
                     onClick = { viewModel.setCurrentTab(MainAppTab.PLAY_DOMINO) },
                     icon = { Icon(Icons.Default.TableRestaurant, contentDescription = null) },
-                    label = { Text("Juego de Mesa") },
+                    label = { Text("Mesa") },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = DominoGold,
                         selectedTextColor = DominoGold
                     ),
                     modifier = Modifier.testTag("nav_play_domino")
+                )
+                NavigationBarItem(
+                    selected = state.currentTab == MainAppTab.PUZZLES,
+                    onClick = { viewModel.setCurrentTab(MainAppTab.PUZZLES) },
+                    icon = { Icon(Icons.Default.Extension, contentDescription = null) },
+                    label = { Text("Puzzles") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = DominoGold,
+                        selectedTextColor = DominoGold
+                    ),
+                    modifier = Modifier.testTag("nav_puzzles")
+                )
+                NavigationBarItem(
+                    selected = state.currentTab == MainAppTab.STATS,
+                    onClick = { viewModel.setCurrentTab(MainAppTab.STATS) },
+                    icon = { Icon(Icons.Default.Leaderboard, contentDescription = null) },
+                    label = { Text("Perfil") },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF38BDF8),
+                        selectedTextColor = Color(0xFF38BDF8)
+                    ),
+                    modifier = Modifier.testTag("nav_stats")
                 )
             }
         },
@@ -351,53 +420,87 @@ fun DominoGameScreen(
             }
         }
     ) { innerPadding ->
-        if (state.currentTab == MainAppTab.PLAY_DOMINO) {
-            if (state.inTableLobby) {
-                // Table Mode Lobby: Select Bots vs Friends & Player count (2, 3, 4)
-                DominoLobbyScreen(
-                    currentDisplayName = currentUser?.displayName ?: "Tú",
-                    onStartBotGame = { totalPlayers, targetScore, playMode ->
-                        val botCount = (totalPlayers - 1).coerceIn(1, 3)
-                        viewModel.startNewDominoTableGame(
-                            roomCode = null,
-                            botCount = botCount,
-                            targetScore = targetScore,
-                            playMode = playMode
-                        )
-                    },
-                    onOpenFriendsDialog = { viewModel.setShowFriendsDialog(true) },
-                    onEditProfile = { viewModel.setShowAuthDialog(true) },
-                    hasActiveGame = tableState.boardTiles.isNotEmpty() || tableState.players.any { it.totalScore > 0 },
-                    onResumeGame = { viewModel.setInTableLobby(false) },
-                    availableUpdate = availableUpdate,
-                    onUpdateClick = { url -> viewModel.downloadUpdate(url) },
-                    onDismissUpdate = { viewModel.dismissUpdateBanner() },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                )
-            } else {
-                // Interactive Domino Table Screen (Play vs Bots / Online Friends)
-                DominoTableView(
-                    state = tableState,
-                    selectedTile = selectedTile,
-                    onSelectTile = { viewModel.setSelectedTile(it) },
-                    onPlayTile = { tile, placement -> viewModel.playHumanTile(tile, placement) },
-                    onDrawTile = { viewModel.drawHumanTile() },
-                    onPassTurn = { viewModel.passHumanTurn() },
-                    onNextRound = { viewModel.nextTableRound() },
-                    onStartWaitingGame = { viewModel.startWaitingRoomGame() },
-                    onAddGuest = { viewModel.addGuestWithCode(it) },
-                    onRemoveGuest = { viewModel.removePlayerFromWaitingRoom(it) },
-                    onFillBotsAndStart = { viewModel.fillRemainingSlotsWithBotsAndStart() },
-                    onCancelWaitingRoom = { viewModel.cancelWaitingRoom() },
+        when (state.currentTab) {
+            MainAppTab.PLAY_DOMINO -> {
+                if (state.inTableLobby) {
+                    DominoLobbyScreen(
+                        currentDisplayName = currentUser?.displayName ?: "Tú",
+                        onStartBotGame = { totalPlayers, targetScore, playMode ->
+                            val botCount = (totalPlayers - 1).coerceIn(1, 3)
+                            viewModel.startNewDominoTableGame(
+                                roomCode = null,
+                                botCount = botCount,
+                                targetScore = targetScore,
+                                playMode = playMode
+                            )
+                        },
+                        onOpenFriendsDialog = { viewModel.setShowFriendsDialog(true) },
+                        onEditProfile = { viewModel.setShowAuthDialog(true) },
+                        hasActiveGame = tableState.boardTiles.isNotEmpty() || tableState.players.any { it.totalScore > 0 },
+                        onResumeGame = { viewModel.setInTableLobby(false) },
+                        availableUpdate = availableUpdate,
+                        onUpdateClick = { url -> viewModel.downloadUpdate(url) },
+                        onDismissUpdate = { viewModel.dismissUpdateBanner() },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    )
+                } else {
+                    DominoTableView(
+                        state = tableState,
+                        selectedTile = selectedTile,
+                        onSelectTile = { viewModel.setSelectedTile(it) },
+                        onPlayTile = { tile, placement -> viewModel.playHumanTile(tile, placement) },
+                        onDrawTile = { viewModel.drawHumanTile() },
+                        onPassTurn = { viewModel.passHumanTurn() },
+                        onNextRound = { viewModel.nextTableRound() },
+                        tileSkin = tileSkin,
+                        tableMat = tableMat,
+                        activeReactionBubble = activeReactionBubble,
+                        onSendReaction = { viewModel.sendPlayerReaction(it) },
+                        isSoundMuted = isSoundMuted,
+                        onToggleSound = { viewModel.toggleSound() },
+                        onOpenSkins = { viewModel.setShowSkinsDialog(true) },
+                        onOpenRules = { viewModel.setShowRulesDialog(true) },
+                        onStartWaitingGame = { viewModel.startWaitingRoomGame() },
+                        onAddGuest = { viewModel.addGuestWithCode(it) },
+                        onRemoveGuest = { viewModel.removePlayerFromWaitingRoom(it) },
+                        onFillBotsAndStart = { viewModel.fillRemainingSlotsWithBotsAndStart() },
+                        onCancelWaitingRoom = { viewModel.cancelWaitingRoom() },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    )
+                }
+            }
+            MainAppTab.PUZZLES -> {
+                DominoPuzzlesScreen(
+                    tileSkin = tileSkin,
+                    onBack = { viewModel.setCurrentTab(MainAppTab.PLAY_DOMINO) },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
                 )
             }
-        } else {
-            // Scorer Screen (Anotador Actual)
+            MainAppTab.STATS -> {
+                PlayerStatsScreen(
+                    stats = playerStats,
+                    playerName = currentUser?.displayName ?: "Tú",
+                    tileSkin = tileSkin,
+                    tableMat = tableMat,
+                    regionalRules = regionalRules,
+                    isSoundMuted = isSoundMuted,
+                    onOpenSkins = { viewModel.setShowSkinsDialog(true) },
+                    onOpenRules = { viewModel.setShowRulesDialog(true) },
+                    onToggleSound = { viewModel.toggleSound() },
+                    onBack = { viewModel.setCurrentTab(MainAppTab.PLAY_DOMINO) },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                )
+            }
+            MainAppTab.SCORER -> {
+                // Scorer Screen (Anotador Actual)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -631,4 +734,32 @@ fun DominoGameScreen(
             onDismiss = { viewModel.setShowFriendsDialog(false) }
         )
     }
+
+    if (state.showSkinsDialog) {
+        SkinsDialog(
+            selectedTileSkin = tileSkin,
+            selectedTableMat = tableMat,
+            onSelectTileSkin = { viewModel.setTileSkin(it) },
+            onSelectTableMat = { viewModel.setTableMat(it) },
+            onDismiss = { viewModel.setShowSkinsDialog(false) }
+        )
+    }
+
+    if (state.showRulesDialog) {
+        RegionalRulesDialog(
+            selectedRules = regionalRules,
+            onSelectRules = { viewModel.setRegionalRules(it) },
+            onDismiss = { viewModel.setShowRulesDialog(false) }
+        )
+    }
+
+    if (isLoadingBots) {
+        BotLoadingDialog(
+            isLoading = isLoadingBots,
+            bots = loadingBotsList,
+            playMode = tableState.playMode,
+            targetScore = tableState.targetScore
+        )
+    }
+}
 }

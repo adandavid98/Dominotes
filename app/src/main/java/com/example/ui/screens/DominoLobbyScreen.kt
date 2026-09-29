@@ -709,7 +709,7 @@ fun DominoLobbyScreen(
                                 }
                                 Spacer(modifier = Modifier.height(1.dp))
                                 Text(
-                                    text = "Tú y María vs Carlos y Luis",
+                                    text = "Tú y Pareja vs Rivales (Bots Aleatorios)",
                                     color = if (isParejas) Color(0xFFD1FAE5) else Color(0xFF94A3B8),
                                     fontSize = teamsSubSize,
                                     textAlign = TextAlign.Center,

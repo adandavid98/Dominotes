@@ -158,12 +158,11 @@ fun calculateTilePips(
 private class DominoSnakeBranch(
     private val wShort: Float,
     private val wLong: Float,
-    private val maxTilesInRow: Int,
-    private val maxTilesInColumn: Int,
+    private val maxTilesInRow: Int = 6,
+    private val maxTilesInColumn: Int = 2,
     initialDirection: BoardDirection,
     private val isLeftBranch: Boolean,
-    initialTile: PlacedBoardTile,
-    private val maxHorizontalSpan: Float = maxTilesInRow * wLong
+    initialTile: PlacedBoardTile
 ) {
     var currentDirection: BoardDirection = initialDirection
         private set
@@ -172,6 +171,8 @@ private class DominoSnakeBranch(
         private set
 
     var countInCurrentSegment: Int = 0
+
+    private var isFirstSegment: Boolean = true
 
     private var nextHorizontalDir: BoardDirection = if (isLeftBranch) BoardDirection.RIGHT else BoardDirection.LEFT
 
@@ -213,25 +214,21 @@ private class DominoSnakeBranch(
         var isTurning = false
         val oldDir = currentDirection
 
-        // En el dominó real, una ficha DOBLE se coloca SIEMPRE atravesada / perpendicular al extremo
-        // actual de avance, nunca gira una esquina en L. El giro lo ejecuta la siguiente ficha no doble.
-        // Además, al avanzar horizontalmente (RIGHT o LEFT), la fila debe recorrer todo el ancho del
-        // tablero hasta el extremo antes de girar hacia arriba/abajo, evitando giros prematuros a mitad de tablero.
-        val shouldTurn = if (tile.isDouble) {
-            false
-        } else {
-            when (currentDirection) {
-                BoardDirection.LEFT -> {
-                    // Avanza hacia la izquierda hasta llegar al extremo izquierdo del tablero
-                    (lastPlaced.x <= -maxHorizontalSpan + 1f) || (countInCurrentSegment >= maxTilesInRow * 2)
-                }
-                BoardDirection.RIGHT -> {
-                    // Avanza hacia la derecha hasta llegar al extremo derecho del tablero
-                    ((lastPlaced.x + lastPlaced.width) >= maxHorizontalSpan - 1f) || (countInCurrentSegment >= maxTilesInRow * 2)
-                }
-                BoardDirection.UP, BoardDirection.DOWN -> {
-                    countInCurrentSegment >= maxTilesInColumn
-                }
+        // Límite estricto de fichas horizontales: máximo 6 fichas horizontal incluyendo dobles de por medio.
+        // En el primer segmento saliendo del ancla, como el ancla (opener) ya cuenta como 1 ficha horizontal,
+        // la rama coloca hasta (maxTilesInRow - 1) fichas (5 fichas). Al llegar a la 6ª ficha de la rama
+        // (ejemplo: ficha 5/6, que es la 7ª ficha en la mesa), se alcanza el límite y realiza el giro de 90°
+        // hacia abajo (Head / RIGHT) o hacia arriba (Tail / LEFT).
+        // En los segmentos horizontales posteriores, no hay ancla y se admiten exactamente maxTilesInRow (6 fichas).
+        val maxAllowedHorizontal = if (isFirstSegment) (maxTilesInRow - 1).coerceAtLeast(1) else maxTilesInRow
+
+        val shouldTurn = when (currentDirection) {
+            BoardDirection.LEFT, BoardDirection.RIGHT -> {
+                countInCurrentSegment >= maxAllowedHorizontal
+            }
+            BoardDirection.UP, BoardDirection.DOWN -> {
+                // Toma exactamente el espacio de 2 fichas verticalmente antes de volver a girar horizontal
+                countInCurrentSegment >= maxTilesInColumn
             }
         }
 
@@ -241,6 +238,7 @@ private class DominoSnakeBranch(
                 isTurning = true
                 currentDirection = nextDir
                 countInCurrentSegment = 0
+                isFirstSegment = false
             }
         }
 
@@ -364,7 +362,7 @@ fun calculateDominoSnakeLayout(
     boardTiles: List<DominoTile>,
     initialTileId: Int? = null,
     baseUnit: Float = 24f, // dp: ancho corto de ficha
-    maxTilesInRow: Int = 3,
+    maxTilesInRow: Int = 6,
     maxTilesInColumn: Int = 2
 ): DominoBoardLayout {
     if (boardTiles.isEmpty()) {

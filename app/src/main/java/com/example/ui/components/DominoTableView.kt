@@ -112,6 +112,8 @@ import com.example.data.domino.DominoTableState
 import com.example.data.domino.DominoTile
 import com.example.data.domino.TableGameStatus
 import com.example.data.domino.TilePlacement
+import com.example.data.theme.TableMatStyle
+import com.example.data.theme.TileSkinStyle
 import com.example.ui.theme.DominoGold
 
 private val PlayerColors = listOf(
@@ -302,6 +304,14 @@ fun DominoTableView(
     onDrawTile: () -> Unit,
     onPassTurn: () -> Unit,
     onNextRound: () -> Unit,
+    tileSkin: TileSkinStyle = TileSkinStyle.HUESO_CLASICO,
+    tableMat: TableMatStyle = TableMatStyle.FIELTRO_VERDE,
+    activeReactionBubble: ActiveReactionBubble? = null,
+    onSendReaction: (DominoReaction) -> Unit = {},
+    isSoundMuted: Boolean = false,
+    onToggleSound: () -> Unit = {},
+    onOpenSkins: () -> Unit = {},
+    onOpenRules: () -> Unit = {},
     onStartWaitingGame: () -> Unit = {},
     onAddGuest: (String) -> Unit = {},
     onRemoveGuest: (Int) -> Unit = {},
@@ -446,7 +456,7 @@ fun DominoTableView(
         val isTeamsMode = state.playMode.isTeams && state.players.size == 4
 
         if (isTeamsMode) {
-            // Team Mode Banner: Shows Team "Nosotros" (Tú + María) vs Team "Rivales" (Carlos + Luis)
+            // Team Mode Banner: Shows Team "Nosotros" (Tú + Pareja) vs Team "Rivales" (Rival 1 + Rival 2)
             val team0Score = state.teamScores.getOrElse(0) { 0 }
             val team1Score = state.teamScores.getOrElse(1) { 0 }
             Surface(
@@ -621,27 +631,17 @@ fun DominoTableView(
             }
         }
 
-        // CENTER: The Game Table Felt (Modern Dark Forest Felt with Radial Depth)
+        // CENTER: The Game Table Felt / Surface (Themed)
         Card(
             shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-            border = BorderStroke(1.2.dp, Color(0xFF134E4A).copy(alpha = 0.6f)),
+            border = BorderStroke(1.5.dp, tableMat.borderColor),
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .padding(vertical = 4.dp)
                 .drawBehind {
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF064E3B).copy(alpha = 0.85f),
-                                Color(0xFF042F2E).copy(alpha = 0.95f),
-                                Color(0xFF021E1E)
-                            ),
-                            center = center,
-                            radius = size.maxDimension * 0.7f
-                        )
-                    )
+                    drawRect(brush = tableMat.backgroundBrush)
                 }
         ) {
             BoxWithConstraints(
@@ -650,6 +650,12 @@ fun DominoTableView(
                     .padding(10.dp),
                 contentAlignment = Alignment.Center
             ) {
+                // Reaction Bubble (Frases y stickers típicos)
+                DominoReactionBubbleView(
+                    bubble = activeReactionBubble,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+
                 if (state.boardTiles.isEmpty()) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -687,7 +693,7 @@ fun DominoTableView(
                             boardTiles = state.boardTiles,
                             initialTileId = state.initialTileId,
                             baseUnit = 24f,
-                            maxTilesInRow = 3,
+                            maxTilesInRow = 6,
                             maxTilesInColumn = 2
                         )
                     }
@@ -698,7 +704,7 @@ fun DominoTableView(
                         contentHeight = layout.boundingHeight,
                         viewportWidth = maxWidth.value,
                         viewportHeight = maxHeight.value,
-                        paddingDp = 18f,
+                        paddingDp = 12f,
                         minScale = 0.15f,
                         maxScale = 1.0f
                     )
@@ -744,6 +750,7 @@ fun DominoTableView(
                                         sourceStartY = flightTrajectory.startY,
                                         sourceScale = flightTrajectory.startScale,
                                         sourceRotation = flightTrajectory.startRotation,
+                                        tileSkin = tileSkin,
                                         canPlayLeft = canPlayLeft,
                                         canPlayRight = canPlayRight,
                                         onPlayClick = {
@@ -870,6 +877,12 @@ fun DominoTableView(
                             }
                         }
                     }
+
+                    // Expresiones del Dominó en la cabecera (Espacio indicado por el usuario)
+                    DominoExpressionsHeaderButton(
+                        onSendReaction = onSendReaction,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
 
                     // Score Pill and/or Bot turn indicator
                     Row(
@@ -1155,6 +1168,7 @@ fun DominoTableView(
                             DominoTileView(
                                 topPips = tile.left,
                                 bottomPips = tile.right,
+                                tileSkin = tileSkin,
                                 width = 42.dp,
                                 height = 84.dp,
                                 isHighlighted = isSelected,
@@ -1472,6 +1486,10 @@ private fun RoundOverOverlay(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     if (isTeamsMode) {
+                        val team0Players = state.players.filter { it.teamId == 0 }
+                        val team0Names = team0Players.joinToString(" + ") { it.name.replace(" (Bot)", "") }.ifBlank { "Tú + Pareja" }
+                        val team1Players = state.players.filter { it.teamId == 1 }
+                        val team1Names = team1Players.joinToString(" + ") { it.name.replace(" (Bot)", "") }.ifBlank { "Rivales" }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1479,7 +1497,7 @@ private fun RoundOverOverlay(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Tu Pareja (Tú + María)", color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("Tu Pareja ($team0Names)", color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             Text("$team0Score / ${state.targetScore} pts", color = DominoGold, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
                         }
                         Row(
@@ -1489,7 +1507,7 @@ private fun RoundOverOverlay(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Pareja Rival (Carlos + Luis)", color = Color(0xFFF87171), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("Pareja Rival ($team1Names)", color = Color(0xFFF87171), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             Text("$team1Score / ${state.targetScore} pts", color = DominoGold, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
                         }
                     } else {
@@ -1543,6 +1561,7 @@ private fun AnimatedPlacedTileView(
     sourceStartY: Float,
     sourceScale: Float,
     sourceRotation: Float,
+    tileSkin: TileSkinStyle,
     canPlayLeft: Boolean,
     canPlayRight: Boolean,
     onPlayClick: () -> Unit
@@ -1645,6 +1664,7 @@ private fun AnimatedPlacedTileView(
             DominoTileView(
                 topPips = placedTile.topOrLeftPips,
                 bottomPips = placedTile.bottomOrRightPips,
+                tileSkin = tileSkin,
                 width = placedTile.width.dp,
                 height = placedTile.height.dp,
                 isHighlighted = canPlayLeft || canPlayRight
@@ -1653,6 +1673,7 @@ private fun AnimatedPlacedTileView(
             HorizontalDominoTileView(
                 leftPips = placedTile.topOrLeftPips,
                 rightPips = placedTile.bottomOrRightPips,
+                tileSkin = tileSkin,
                 width = placedTile.width.dp,
                 height = placedTile.height.dp,
                 isHighlighted = canPlayLeft || canPlayRight

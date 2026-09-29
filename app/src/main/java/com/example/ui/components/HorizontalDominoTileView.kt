@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.data.theme.TileSkinStyle
 
 @Composable
 fun HorizontalDominoTileView(
@@ -27,14 +28,16 @@ fun HorizontalDominoTileView(
     modifier: Modifier = Modifier,
     width: Dp = 80.dp,
     height: Dp = 40.dp,
-    dotColor: Color = Color(0xFF0F172A),
-    backgroundColor: Color = Color(0xFFFFFFFF),
+    tileSkin: TileSkinStyle = TileSkinStyle.HUESO_CLASICO,
+    dotColor: Color? = null,
+    backgroundColor: Color? = null,
     isHighlighted: Boolean = false,
     dimmed: Boolean = false,
     canPlayBorder: Boolean = false
 ) {
     // Proportional, elegant corner radius (scaled with height)
     val cornerRadius = (height * 0.13f).coerceIn(3.dp, 8.dp)
+    val effectiveDotColor = dotColor ?: tileSkin.dotColor
 
     Box(
         modifier = modifier
@@ -47,30 +50,15 @@ fun HorizontalDominoTileView(
             )
             .clip(RoundedCornerShape(cornerRadius))
             .background(
-                Brush.linearGradient(
-                    colors = if (isHighlighted) listOf(
-                        Color(0xFFFFFFFF),
-                        Color(0xFFE0F2FE),
-                        Color(0xFFBAE6FD)
-                    ) else if (canPlayBorder) listOf(
-                        Color(0xFFFFFFFF),
-                        Color(0xFFF0FDF4),
-                        Color(0xFFDCFCE7)
-                    ) else if (dimmed) listOf(
-                        Color(0xFFE2E8F0),
-                        Color(0xFFCBD5E1)
-                    ) else listOf(
-                        Color(0xFFFFFFFF),
-                        Color(0xFFF8FAFC),
-                        Color(0xFFF1F5F9)
-                    ),
-                    start = Offset.Zero,
-                    end = Offset.Infinite
+                tileSkin.getBackgroundBrush(
+                    isHighlighted = isHighlighted,
+                    canPlayBorder = canPlayBorder,
+                    dimmed = dimmed
                 )
             )
             .border(
                 width = if (isHighlighted) 2.4.dp else if (canPlayBorder) 2.2.dp else 1.2.dp,
-                color = if (isHighlighted) Color(0xFF0284C7) else if (canPlayBorder) Color(0xFF10B981) else Color(0xFF94A3B8).copy(alpha = 0.6f),
+                color = if (isHighlighted) Color(0xFF0284C7) else if (canPlayBorder) Color(0xFF10B981) else tileSkin.borderColor.copy(alpha = 0.8f),
                 shape = RoundedCornerShape(cornerRadius)
             ),
         contentAlignment = Alignment.Center
@@ -83,7 +71,7 @@ fun HorizontalDominoTileView(
 
             // Inner subtle rim bevel
             drawRoundRect(
-                color = Color.White.copy(alpha = 0.85f),
+                color = Color.White.copy(alpha = if (tileSkin == TileSkinStyle.ACRILICO_NOCHE) 0.15f else 0.85f),
                 topLeft = Offset(1f, 1f),
                 size = Size(w - 2f, h - 2f),
                 cornerRadius = CornerRadius(cornerRadius.toPx(), cornerRadius.toPx())
@@ -91,23 +79,23 @@ fun HorizontalDominoTileView(
 
             // Clear, high-visibility vertical divider groove
             drawLine(
-                color = Color(0xFF1E293B), // Slate 800 for crisp definition
+                color = tileSkin.dividerColor,
                 start = Offset(midX, h * 0.07f),
                 end = Offset(midX, h * 0.93f),
                 strokeWidth = (h * 0.035f).coerceIn(1.5f, 3.5f)
             )
             // Subtle embossed highlight
             drawLine(
-                color = Color.White.copy(alpha = 0.9f),
+                color = Color.White.copy(alpha = if (tileSkin == TileSkinStyle.ACRILICO_NOCHE) 0.2f else 0.9f),
                 start = Offset(midX + 1.2f, h * 0.07f),
                 end = Offset(midX + 1.2f, h * 0.93f),
                 strokeWidth = 1f
             )
 
-            // Metallic brass center pivot bead
+            // Center pivot bead
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFFFDE68A), Color(0xFFD97706), Color(0xFF78350F)),
+                    colors = tileSkin.pinColors,
                     center = Offset(midX - 0.4f, h / 2f - 0.4f),
                     radius = dotRadius * 0.9f
                 ),
@@ -115,7 +103,7 @@ fun HorizontalDominoTileView(
                 center = Offset(midX, h / 2f)
             )
 
-            val effectiveDotColor = if (dimmed) dotColor.copy(alpha = 0.4f) else dotColor
+            val renderDotColor = if (dimmed) effectiveDotColor.copy(alpha = 0.4f) else effectiveDotColor
 
             // Safe pip bounding area for each half (strictly centered, never touching borders or corners)
             val pipSpanX = midX * 0.50f
@@ -129,7 +117,7 @@ fun HorizontalDominoTileView(
                 spanX = pipSpanX,
                 spanY = pipSpanY,
                 dotRadius = dotRadius,
-                dotColor = effectiveDotColor
+                dotColor = renderDotColor
             )
 
             // Right Half Pips
@@ -140,7 +128,7 @@ fun HorizontalDominoTileView(
                 spanX = pipSpanX,
                 spanY = pipSpanY,
                 dotRadius = dotRadius,
-                dotColor = effectiveDotColor
+                dotColor = renderDotColor
             )
         }
     }

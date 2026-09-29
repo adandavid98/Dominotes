@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
 import com.example.data.auth.AuthRepository
 import com.example.data.auth.AuthUser
+import com.example.data.domino.BotProfile
+import com.example.data.domino.BotRoster
 import com.example.data.domino.DominoEngine
 import com.example.data.domino.DominoGamePlayMode
 import com.example.data.domino.DominoTableState
@@ -19,8 +21,16 @@ import com.example.data.model.BonusTag
 import com.example.data.model.GameMode
 import com.example.data.model.ScoringDisplayMode
 import com.example.data.repository.DominoRepository
+import com.example.data.rules.RegionalRuleSet
+import com.example.data.sound.DominoSoundManager
+import com.example.data.stats.PlayerDominoStats
+import com.example.data.stats.PlayerStatsRepository
+import com.example.data.theme.TableMatStyle
+import com.example.data.theme.TileSkinStyle
 import com.example.data.update.AppUpdateChecker
 import com.example.data.update.UpdateInfo
+import com.example.ui.components.ActiveReactionBubble
+import com.example.ui.components.DominoReaction
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,7 +42,9 @@ import kotlinx.coroutines.launch
 
 enum class MainAppTab {
     SCORER,
-    PLAY_DOMINO
+    PLAY_DOMINO,
+    PUZZLES,
+    STATS
 }
 
 data class ActiveGameState(
@@ -52,6 +64,8 @@ data class ActiveGameState(
     val showNewGameDialog: Boolean = false,
     val showVictoryDialog: Boolean = false,
     val showHistoryScreen: Boolean = false,
+    val showSkinsDialog: Boolean = false,
+    val showRulesDialog: Boolean = false,
     val currentTab: MainAppTab = MainAppTab.SCORER,
     val showAuthDialog: Boolean = false,
     val showFriendsDialog: Boolean = false,
@@ -63,6 +77,25 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
     val authRepository = AuthRepository(application)
     val currentUser: StateFlow<AuthUser?> = authRepository.currentUser
 
+    val soundManager = DominoSoundManager(application)
+    private val _isSoundMuted = MutableStateFlow(false)
+    val isSoundMuted: StateFlow<Boolean> = _isSoundMuted.asStateFlow()
+
+    private val _tileSkin = MutableStateFlow(TileSkinStyle.HUESO_CLASICO)
+    val tileSkin: StateFlow<TileSkinStyle> = _tileSkin.asStateFlow()
+
+    private val _tableMat = MutableStateFlow(TableMatStyle.FIELTRO_VERDE)
+    val tableMat: StateFlow<TableMatStyle> = _tableMat.asStateFlow()
+
+    private val _regionalRules = MutableStateFlow(RegionalRuleSet.VENEZUELA)
+    val regionalRules: StateFlow<RegionalRuleSet> = _regionalRules.asStateFlow()
+
+    private val statsRepo = PlayerStatsRepository(application)
+    val playerStats: StateFlow<PlayerDominoStats> = statsRepo.stats
+
+    private val _activeReactionBubble = MutableStateFlow<ActiveReactionBubble?>(null)
+    val activeReactionBubble: StateFlow<ActiveReactionBubble?> = _activeReactionBubble.asStateFlow()
+
     private val _gameState = MutableStateFlow(ActiveGameState())
     val gameState: StateFlow<ActiveGameState> = _gameState.asStateFlow()
 
@@ -71,10 +104,17 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
         DominoEngine.startNewMatch(
             humanPlayerName = authRepository.currentUser.value?.displayName ?: "Jugador",
             botCount = 3,
-            targetScore = 100
+            targetScore = 100,
+            regionalRules = RegionalRuleSet.VENEZUELA
         )
     )
     val tableState: StateFlow<DominoTableState> = _tableState.asStateFlow()
+
+    private val _isLoadingBots = MutableStateFlow(false)
+    val isLoadingBots: StateFlow<Boolean> = _isLoadingBots.asStateFlow()
+
+    private val _loadingBotsList = MutableStateFlow<List<BotProfile>>(emptyList())
+    val loadingBotsList: StateFlow<List<BotProfile>> = _loadingBotsList.asStateFlow()
 
     private val _selectedTile = MutableStateFlow<DominoTile?>(null)
     val selectedTile: StateFlow<DominoTile?> = _selectedTile.asStateFlow()
@@ -514,16 +554,30 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
         playMode: DominoGamePlayMode = if (botCount == 3) DominoGamePlayMode.PAREJAS_2V2 else DominoGamePlayMode.INDIVIDUAL
     ) {
         val humanName = authRepository.currentUser.value?.displayName ?: "Tú"
-        _tableState.value = DominoEngine.startNewMatch(
-            humanPlayerName = humanName,
-            botCount = botCount,
-            targetScore = targetScore,
-            roomCode = roomCode,
-            playMode = playMode
-        )
-        _selectedTile.value = null
-        _gameState.update { it.copy(inTableLobby = false) }
-        checkTriggerBotTurns()
+        val isTeams = playMode.isTeams && (botCount + 1 == 4)
+        val selectedBots = BotRoster.getRandomBots(count = botCount, isTeams = isTeams)
+
+        viewModelScope.launch {
+            _loadingBotsList.value = selectedBots
+            _isLoadingBots.value = true
+
+            // Convocatoria y búsqueda aleatoria de bots durante 5 segundos
+            delay(5000L)
+
+            _tableState.value = DominoEngine.startNewMatch(
+                humanPlayerName = humanName,
+                botCount = botCount,
+                targetScore = targetScore,
+                roomCode = roomCode,
+                playMode = playMode,
+                regionalRules = _regionalRules.value,
+                selectedBots = selectedBots
+            )
+            _selectedTile.value = null
+            _gameState.update { it.copy(inTableLobby = false) }
+            _isLoadingBots.value = false
+            checkTriggerBotTurns()
+        }
     }
 
     fun playHumanTile(tile: DominoTile, placement: TilePlacement) {
@@ -536,6 +590,14 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
         _tableState.value = newState
         _selectedTile.value = null
 
+        val isDecisive = newState.status != TableGameStatus.PLAYING
+        soundManager.playTileClack(isDecisive = isDecisive)
+
+        if (newState.status == TableGameStatus.ROUND_OVER || newState.status == TableGameStatus.GAME_OVER) {
+            soundManager.playHeavySlam()
+            recordMatchStats(newState)
+        }
+
         checkTriggerBotTurns()
     }
 
@@ -544,11 +606,11 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
         val turnIdx = currentState.currentTurnIndex
         val player = currentState.players.getOrNull(turnIdx)
         if (player == null || player.isBot || currentState.status != TableGameStatus.PLAYING) return
-        // Regla oficial de dominó: No se puede robar si ya tienes fichas que puedes jugar
         if (DominoEngine.canPlayerPlay(player, currentState)) return
 
         val newState = DominoEngine.drawFromBoneyard(currentState, turnIdx)
         _tableState.value = newState
+        soundManager.playTileClack(isDecisive = false)
         checkTriggerBotTurns()
     }
 
@@ -557,14 +619,19 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
         val turnIdx = currentState.currentTurnIndex
         val player = currentState.players.getOrNull(turnIdx)
         if (player == null || player.isBot || currentState.status != TableGameStatus.PLAYING) return
-        // Regla oficial de dominó: No se puede pasar si tienes fichas que puedes tirar en la mesa
         if (DominoEngine.canPlayerPlay(player, currentState)) return
-        // Tampoco se puede pasar si aún quedan fichas por robar en el pozo
         if (currentState.boneyard.isNotEmpty()) return
 
+        soundManager.playPassTap()
         val newState = DominoEngine.passTurn(currentState, turnIdx)
         _tableState.value = newState
         _selectedTile.value = null
+
+        if (newState.status == TableGameStatus.ROUND_OVER || newState.status == TableGameStatus.GAME_OVER) {
+            soundManager.playHeavySlam()
+            recordMatchStats(newState)
+        }
+
         checkTriggerBotTurns()
     }
 
@@ -586,11 +653,88 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
                 roomCode = current.roomCode,
                 playMode = current.playMode,
                 teamScores = current.teamScores,
-                starterPlayerIndex = nextStarter
+                starterPlayerIndex = nextStarter,
+                regionalRules = _regionalRules.value
             )
             _selectedTile.value = null
             checkTriggerBotTurns()
         }
+    }
+
+    private fun recordMatchStats(state: DominoTableState) {
+        val humanWinner = state.roundWinnerIndex == 0 || (state.playMode.isTeams && state.players.getOrNull(state.roundWinnerIndex ?: -1)?.teamId == 0)
+        statsRepo.recordMatchOutcome(
+            won = humanWinner,
+            isTeams = state.playMode.isTeams,
+            pointsScored = state.pointsWonThisRound,
+            winningTile = state.lastPlayedTile,
+            wasTranca = state.isBlocked,
+            wasCapicua = state.isCapicua
+        )
+    }
+
+    fun sendPlayerReaction(reaction: DominoReaction) {
+        val humanName = authRepository.currentUser.value?.displayName ?: "Tú"
+        _activeReactionBubble.value = ActiveReactionBubble(
+            playerIndex = 0,
+            playerName = humanName,
+            expression = reaction
+        )
+        if (reaction.audioDecisive) {
+            soundManager.playHeavySlam()
+        } else {
+            soundManager.playTileClack(isDecisive = false)
+        }
+        viewModelScope.launch {
+            delay(3000L)
+            if (_activeReactionBubble.value?.playerIndex == 0) {
+                _activeReactionBubble.value = null
+            }
+        }
+    }
+
+    fun triggerBotReaction(botIndex: Int, botName: String, reaction: DominoReaction) {
+        _activeReactionBubble.value = ActiveReactionBubble(
+            playerIndex = botIndex,
+            playerName = botName,
+            expression = reaction
+        )
+        if (reaction.audioDecisive) {
+            soundManager.playHeavySlam()
+        }
+        viewModelScope.launch {
+            delay(2800L)
+            if (_activeReactionBubble.value?.playerIndex == botIndex) {
+                _activeReactionBubble.value = null
+            }
+        }
+    }
+
+    fun setTileSkin(skin: TileSkinStyle) {
+        _tileSkin.value = skin
+    }
+
+    fun setTableMat(mat: TableMatStyle) {
+        _tableMat.value = mat
+    }
+
+    fun setRegionalRules(rules: RegionalRuleSet) {
+        _regionalRules.value = rules
+        _tableState.update { it.copy(regionalRules = rules, targetScore = rules.defaultTargetScore) }
+    }
+
+    fun toggleSound() {
+        val newMuted = !_isSoundMuted.value
+        _isSoundMuted.value = newMuted
+        soundManager.setMuted(newMuted)
+    }
+
+    fun setShowSkinsDialog(show: Boolean) {
+        _gameState.update { it.copy(showSkinsDialog = show) }
+    }
+
+    fun setShowRulesDialog(show: Boolean) {
+        _gameState.update { it.copy(showRulesDialog = show) }
     }
 
     private var botTurnJob: kotlinx.coroutines.Job? = null
@@ -620,21 +764,47 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
                 val decision = DominoEngine.computeBotMove(_tableState.value, botIdx)
                 when (decision) {
                     is DominoEngine.BotDecision.Play -> {
+                        val beforeStatus = _tableState.value.status
                         _tableState.value = DominoEngine.playTile(
                             _tableState.value,
                             botIdx,
                             decision.tile,
                             decision.placement
                         )
+                        val afterStatus = _tableState.value.status
+                        val isDecisive = afterStatus != TableGameStatus.PLAYING
+                        soundManager.playTileClack(isDecisive = isDecisive)
+
+                        if (isDecisive) {
+                            soundManager.playHeavySlam()
+                            recordMatchStats(_tableState.value)
+                            if (bot != null) {
+                                triggerBotReaction(
+                                    botIdx,
+                                    bot.name,
+                                    if (_tableState.value.isBlocked) DominoReaction("💥", "¡Trancao!", true)
+                                    else DominoReaction("😎", "¡Dominó!", true)
+                                )
+                            }
+                        }
                         // Pausa de 2.5s para que se aprecie la ficha jugada y el mensaje con la ficha colocada
                         delay(2500L)
                     }
                     is DominoEngine.BotDecision.Draw -> {
                         _tableState.value = DominoEngine.drawFromBoneyard(_tableState.value, botIdx)
+                        soundManager.playTileClack(isDecisive = false)
                         delay(1800L)
                     }
                     is DominoEngine.BotDecision.Pass -> {
-                        _tableState.value = DominoEngine.passTurn(_tableState.value, botIdx)
+                        soundManager.playPassTap()
+                        val newState = DominoEngine.passTurn(_tableState.value, botIdx)
+                        _tableState.value = newState
+                        if (newState.status != TableGameStatus.PLAYING) {
+                            soundManager.playHeavySlam()
+                            recordMatchStats(newState)
+                        } else if (bot != null && kotlin.random.Random.nextFloat() < 0.4f) {
+                            triggerBotReaction(botIdx, bot.name, DominoReaction("✋", "¡Paso!", false))
+                        }
                         delay(1800L)
                     }
                 }
@@ -829,9 +999,10 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        val botNames = listOf("Carlos (Bot)", "María (Bot)", "Luis (Bot)")
-        val mutablePlayers = current.players.toMutableList()
         val isTeams = current.playMode.isTeams && current.targetPlayerCount == 4
+        val mutablePlayers = current.players.toMutableList()
+        val existingNames = mutablePlayers.map { it.name }.toSet()
+        val randomBots = BotRoster.getRandomBots(count = needed, isTeams = isTeams, excludeNames = existingNames)
 
         for (i in 0 until needed) {
             val playerIndex = mutablePlayers.size
@@ -840,14 +1011,17 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
             } else {
                 playerIndex
             }
-            val botName = botNames.getOrElse(i) { "Bot ${i + 1}" }
+            val bot = randomBots.getOrNull(i)
             mutablePlayers.add(
                 com.example.data.domino.DominoPlayer(
-                    id = "bot_${System.currentTimeMillis()}_$i",
-                    name = botName,
+                    id = bot?.id ?: "bot_${System.currentTimeMillis()}_$i",
+                    name = bot?.name ?: "Bot ${i + 1}",
                     isBot = true,
                     avatarColorIndex = playerIndex % 4,
-                    teamId = teamId
+                    teamId = teamId,
+                    capability = bot?.capability ?: com.example.data.domino.BotCapability.EQUILIBRADO_CLASICO,
+                    originCity = bot?.originCity ?: "",
+                    avatarEmoji = bot?.avatarEmoji ?: "🎲"
                 )
             )
         }

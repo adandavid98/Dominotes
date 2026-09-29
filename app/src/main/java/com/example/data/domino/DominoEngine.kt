@@ -1,5 +1,6 @@
 package com.example.data.domino
 
+import com.example.data.rules.RegionalRuleSet
 import kotlin.random.Random
 
 object DominoEngine {
@@ -9,7 +10,9 @@ object DominoEngine {
         botCount: Int = 3,
         targetScore: Int = 100,
         roomCode: String? = null,
-        playMode: DominoGamePlayMode = if (botCount == 3) DominoGamePlayMode.PAREJAS_2V2 else DominoGamePlayMode.INDIVIDUAL
+        playMode: DominoGamePlayMode = if (botCount == 3) DominoGamePlayMode.PAREJAS_2V2 else DominoGamePlayMode.INDIVIDUAL,
+        regionalRules: RegionalRuleSet = RegionalRuleSet.VENEZUELA,
+        selectedBots: List<BotProfile>? = null
     ): DominoTableState {
         val totalPlayers = 1 + botCount
         val tilesPerPlayer = 7
@@ -28,12 +31,9 @@ object DominoEngine {
             )
         )
 
-        // Bot 1: Carlos (Left opponent) -> Team 1
-        // Bot 2: María (Partner across) -> Team 0 (Compañero/a)
-        // Bot 3: Luis (Right opponent) -> Team 1
-        val botNames = listOf("Carlos (Bot)", "María (Bot)", "Luis (Bot)")
+        val bots = selectedBots?.take(botCount) ?: BotRoster.getRandomBots(count = botCount, isTeams = isTeams)
         for (i in 1..botCount) {
-            val botName = botNames.getOrElse(i - 1) { "Bot $i" }
+            val bot = bots.getOrNull(i - 1)
             val teamId = if (isTeams) {
                 if (i == 2) 0 else 1 // i=2 (index 2 in players: partner sitting across)
             } else {
@@ -41,11 +41,14 @@ object DominoEngine {
             }
             players.add(
                 DominoPlayer(
-                    id = "bot_$i",
-                    name = botName,
+                    id = bot?.id ?: "bot_$i",
+                    name = bot?.name ?: "Bot $i",
                     isBot = true,
                     avatarColorIndex = i,
-                    teamId = teamId
+                    teamId = teamId,
+                    capability = bot?.capability ?: BotCapability.EQUILIBRADO_CLASICO,
+                    originCity = bot?.originCity ?: "",
+                    avatarEmoji = bot?.avatarEmoji ?: "🎲"
                 )
             )
         }
@@ -55,7 +58,8 @@ object DominoEngine {
             targetScore = targetScore,
             roomCode = roomCode,
             playMode = playMode,
-            teamScores = listOf(0, 0)
+            teamScores = listOf(0, 0),
+            regionalRules = regionalRules
         )
     }
 
@@ -65,7 +69,8 @@ object DominoEngine {
         roomCode: String? = null,
         playMode: DominoGamePlayMode = DominoGamePlayMode.PAREJAS_2V2,
         teamScores: List<Int> = listOf(0, 0),
-        starterPlayerIndex: Int? = null
+        starterPlayerIndex: Int? = null,
+        regionalRules: RegionalRuleSet = RegionalRuleSet.VENEZUELA
     ): DominoTableState {
         val allTiles = DominoTile.createDoubleSixSet().shuffled(Random.Default)
         var deckIndex = 0
@@ -83,17 +88,20 @@ object DominoEngine {
             emptyList()
         }
 
-        // Determine starting player:
-        // If a winner from the previous round is specified (starterPlayerIndex), that player has the right
-        // to open the hand first with ANY tile (whether double or not).
-        // For the first hand of a match, the player with the highest double (or highest tile) opens.
         val starterIndex: Int
         val starterMsg: String
 
         if (starterPlayerIndex != null && starterPlayerIndex in updatedPlayers.indices) {
-            starterIndex = starterPlayerIndex
-            val startingPlayer = updatedPlayers[starterIndex]
-            starterMsg = "${startingPlayer.name} ganó la mano anterior y abre la mesa con cualquier ficha"
+            if (regionalRules == RegionalRuleSet.DOMINICANA) {
+                // En dominó dominicano 'corre la mano' sucesivamente a la derecha
+                starterIndex = (starterPlayerIndex + 1) % updatedPlayers.size
+                val startingPlayer = updatedPlayers[starterIndex]
+                starterMsg = "${startingPlayer.name} sale (corre la mano según reglas dominicanas 🇩🇴)"
+            } else {
+                starterIndex = starterPlayerIndex
+                val startingPlayer = updatedPlayers[starterIndex]
+                starterMsg = "${startingPlayer.name} ganó la mano anterior y abre la mesa con cualquier ficha"
+            }
         } else {
             var bestIdx = 0
             var bestDouble = -1
@@ -119,8 +127,13 @@ object DominoEngine {
 
             starterIndex = bestIdx
             val startingPlayer = updatedPlayers[starterIndex]
+            val salidaName = when (regionalRules) {
+                RegionalRuleSet.PUERTO_RICO -> "la 'Puerca'"
+                RegionalRuleSet.VENEZUELA -> "la 'Cochina'"
+                else -> "el doble"
+            }
             starterMsg = if (bestDouble >= 0) {
-                "${startingPlayer.name} abre la primera mano con el doble [$bestDouble|$bestDouble]"
+                "${startingPlayer.name} abre la primera mano con $salidaName [$bestDouble|$bestDouble]"
             } else {
                 "${startingPlayer.name} tiene la salida inicial"
             }
@@ -141,8 +154,10 @@ object DominoEngine {
             roundWinnerIndex = null,
             pointsWonThisRound = 0,
             isBlocked = false,
+            isCapicua = false,
             roomCode = roomCode,
             playMode = playMode,
+            regionalRules = regionalRules,
             teamScores = teamScores,
             targetPlayerCount = players.size,
             isWaitingForGuests = false
@@ -235,12 +250,19 @@ object DominoEngine {
             val isTeams = state.playMode == DominoGamePlayMode.PAREJAS_2V2 && state.players.size == 4
             val winnerTeamId = updatedPlayer.teamId
 
-            val pointsWon = if (isTeams) {
+            val prevLeft = state.leftEnd
+            val prevRight = state.rightEnd
+            val isCapicua = prevLeft != null && prevRight != null && !tile.isDouble &&
+                ((tile.left == prevLeft && tile.right == prevRight) || (tile.left == prevRight && tile.right == prevLeft))
+            val capicuaBonus = if (isCapicua) state.regionalRules.capicuaBonusPoints else 0
+
+            val basePoints = if (isTeams) {
                 // Sum remaining points of the opposing team (players with different teamId)
                 updatedPlayers.filter { it.teamId != winnerTeamId }.sumOf { it.remainingTilePoints }
             } else {
                 updatedPlayers.filterIndexed { idx, _ -> idx != playerIndex }.sumOf { it.remainingTilePoints }
             }
+            val pointsWon = basePoints + capicuaBonus
 
             val newScore = updatedPlayer.totalScore + pointsWon
             val newTeamScores = state.teamScores.toMutableList()
@@ -269,17 +291,18 @@ object DominoEngine {
 
             val teamName = if (winnerTeamId == 0) "Tu Pareja" else "Pareja Rival"
             val isHumanWinner = !updatedPlayer.isBot
+            val capicuaTag = if (isCapicua) " ¡CAPICÚA! 👑" else ""
             val winMsg = if (isTeams) {
                 if (isHumanWinner) {
-                    "¡Ganaste tú! $teamName suma +$pointsWon pts"
+                    "¡Ganaste tú!$capicuaTag $teamName suma +$pointsWon pts"
                 } else {
-                    "¡${updatedPlayer.name} dominó! $teamName suma +$pointsWon pts"
+                    "¡${updatedPlayer.name} dominó!$capicuaTag $teamName suma +$pointsWon pts"
                 }
             } else {
                 if (isHumanWinner) {
-                    "¡Ganaste tú la ronda y sumaste +$pointsWon pts!"
+                    "¡Ganaste tú la ronda!$capicuaTag Sumaste +$pointsWon pts"
                 } else {
-                    "¡${updatedPlayer.name} dominó la ronda y sumó +$pointsWon pts!"
+                    "¡${updatedPlayer.name} dominó la ronda!$capicuaTag Sumó +$pointsWon pts"
                 }
             }
 
@@ -295,6 +318,7 @@ object DominoEngine {
                 roundWinnerIndex = playerIndex,
                 pointsWonThisRound = pointsWon,
                 isBlocked = false,
+                isCapicua = isCapicua,
                 lastActionLog = winMsg,
                 lastPlayedTile = tile,
                 lastPlayedByPlayerName = player.name,
@@ -442,11 +466,100 @@ object DominoEngine {
         }
 
         if (validMoves.isNotEmpty()) {
-            // Priority: Doubles first, then highest points
-            val bestMove = validMoves.maxWithOrNull(
-                compareBy<Pair<DominoTile, TilePlacement>> { it.first.isDouble }
-                    .thenBy { it.first.totalPoints }
-            )!!
+            val bestMove = when (bot.capability) {
+                BotCapability.AGRESIVO_PUNTOS -> {
+                    // Prioriza soltar las fichas más pesadas (puntos altos) y dobles
+                    validMoves.maxWithOrNull(
+                        compareBy<Pair<DominoTile, TilePlacement>> { it.first.totalPoints }
+                            .thenBy { it.first.isDouble }
+                    ) ?: validMoves.first()
+                }
+                BotCapability.TRANQUE_ESTRATEGA -> {
+                    // Si tiene pocos puntos en mano, intenta cerrar la mesa igualando ambos extremos
+                    val myPoints = bot.remainingTilePoints
+                    if (myPoints <= 12) {
+                        val closingMove = validMoves.firstOrNull { (tile, placement) ->
+                            val resultingEnd = if (placement == TilePlacement.LEFT) {
+                                if (tile.left == state.leftEnd) tile.right else tile.left
+                            } else {
+                                if (tile.left == state.rightEnd) tile.right else tile.left
+                            }
+                            val otherEnd = if (placement == TilePlacement.LEFT) state.rightEnd else state.leftEnd
+                            resultingEnd == otherEnd
+                        }
+                        closingMove ?: validMoves.maxWithOrNull(
+                            compareBy<Pair<DominoTile, TilePlacement>> { it.first.isDouble }
+                                .thenBy { it.first.totalPoints }
+                        ) ?: validMoves.first()
+                    } else {
+                        validMoves.maxWithOrNull(
+                            compareBy<Pair<DominoTile, TilePlacement>> { it.first.isDouble }
+                                .thenBy { it.first.totalPoints }
+                        ) ?: validMoves.first()
+                    }
+                }
+                BotCapability.COOPERATIVO_PAREJA -> {
+                    // En parejas, favorece dobles temprano y mantiene salidas abiertas
+                    validMoves.maxWithOrNull(
+                        compareBy<Pair<DominoTile, TilePlacement>> { it.first.isDouble }
+                            .thenBy { it.first.totalPoints }
+                    ) ?: validMoves.first()
+                }
+                BotCapability.MAESTRO_CALCULADOR -> {
+                    // Maestro: prioriza dobles y calcula qué ficha le deja mayor versatilidad de palos en mano
+                    validMoves.maxWithOrNull(
+                        compareBy<Pair<DominoTile, TilePlacement>> { it.first.isDouble }
+                            .thenBy { (tile, _) ->
+                                bot.hand.count { it.left == tile.left || it.right == tile.right || it.left == tile.right || it.right == tile.left }
+                            }
+                            .thenBy { it.first.totalPoints }
+                    ) ?: validMoves.first()
+                }
+                BotCapability.IMPREDECIBLE_AUDAZ -> {
+                    // Busca capicúa si es posible o juega con audacia
+                    val capicuaMove = validMoves.firstOrNull { (tile, _) ->
+                        !tile.isDouble && state.leftEnd != null && state.rightEnd != null &&
+                                tile.canMatch(state.leftEnd) && tile.canMatch(state.rightEnd)
+                    }
+                    capicuaMove ?: validMoves.shuffled().first()
+                }
+                BotCapability.CONSERVADOR_DEFENSIVO -> {
+                    // Conservador: juega para conservar la mayor cantidad de palos distintos
+                    validMoves.minByOrNull { (tile, _) ->
+                        val remainingHand = bot.hand.filterNot { it.id == tile.id }
+                        val suits = remainingHand.flatMap { listOf(it.left, it.right) }.toSet()
+                        -suits.size
+                    } ?: validMoves.first()
+                }
+                BotCapability.EQUILIBRADO_CLASICO -> {
+                    validMoves.maxWithOrNull(
+                        compareBy<Pair<DominoTile, TilePlacement>> { it.first.isDouble }
+                            .thenBy { it.first.totalPoints }
+                    ) ?: validMoves.first()
+                }
+                BotCapability.REMATE_VELOZ -> {
+                    // Especialista en cierres rápidos y mantener la mano corta
+                    validMoves.maxWithOrNull(
+                        compareBy<Pair<DominoTile, TilePlacement>> { it.first.totalPoints }
+                            .thenBy { it.first.isDouble }
+                    ) ?: validMoves.first()
+                }
+                BotCapability.CAUTELOSO_PACIENTE -> {
+                    // Defensor paciente: prefiere jugadas seguras y conservar versatilidad
+                    validMoves.minByOrNull { (tile, _) ->
+                        val remainingHand = bot.hand.filterNot { it.id == tile.id }
+                        val suits = remainingHand.flatMap { listOf(it.left, it.right) }.toSet()
+                        -suits.size
+                    } ?: validMoves.first()
+                }
+                BotCapability.CAZADOR_DOBLES -> {
+                    // Cazadobles: busca neutralizar fichas dobles del rival
+                    validMoves.maxWithOrNull(
+                        compareBy<Pair<DominoTile, TilePlacement>> { !it.first.isDouble }
+                            .thenBy { it.first.totalPoints }
+                    ) ?: validMoves.first()
+                }
+            }
             return BotDecision.Play(bestMove.first, bestMove.second)
         }
 
