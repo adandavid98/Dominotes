@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.dominopuntos.wvnqk"
     minSdk = 24
     targetSdk = 36
-    versionCode = 30
-    versionName = "1.9.1"
+    versionCode = 31
+    versionName = "1.9.2"
     buildConfigField("long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
