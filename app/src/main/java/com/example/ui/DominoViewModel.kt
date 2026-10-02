@@ -171,7 +171,13 @@ class DominoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun downloadUpdate(url: String) {
-        updateChecker.openDownloadUrl(url)
+        val ver = _availableUpdate.value?.remoteVersionName ?: ""
+        updateChecker.downloadUpdate(url, ver)
+    }
+
+    fun openReleasesPage() {
+        val ver = _availableUpdate.value?.remoteVersionName ?: ""
+        updateChecker.openReleasesPage(ver)
     }
 
     fun dismissUpdateBanner() {

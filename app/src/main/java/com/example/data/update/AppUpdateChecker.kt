@@ -1,8 +1,11 @@
 package com.example.data.update
 
+import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
+import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -78,11 +81,17 @@ class AppUpdateChecker(private val context: Context) {
                         "Última Versión (Auto-Release)"
                     }
 
+                    val resolvedDownloadUrl = if (remoteVersionName.isNotBlank()) {
+                        "https://github.com/adandavid98/Dominotes/releases/download/v$remoteVersionName/Dominotes.apk"
+                    } else {
+                        DEFAULT_DOWNLOAD_URL
+                    }
+
                     return@withContext UpdateInfo(
                         hasUpdate = isNewer,
                         releaseTitle = title,
                         releaseNotes = "Nueva versión $remoteVersionName disponible para descargar en GitHub.",
-                        downloadUrl = DEFAULT_DOWNLOAD_URL,
+                        downloadUrl = resolvedDownloadUrl,
                         publishedAtMillis = dateMillis,
                         remoteVersionName = remoteVersionName,
                         remoteVersionCode = remoteVersionCode
@@ -239,14 +248,74 @@ class AppUpdateChecker(private val context: Context) {
         return 0L
     }
 
-    fun openDownloadUrl(url: String) {
+    fun downloadWithDownloadManager(
+        url: String,
+        versionName: String = ""
+    ): Boolean {
+        return try {
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                ?: return false
+            val fileName = if (versionName.isNotBlank()) "Dominotes-v$versionName.apk" else "Dominotes.apk"
+            val uri = Uri.parse(url)
+            val request = DownloadManager.Request(uri).apply {
+                val label = if (versionName.isNotBlank()) "Dominotes v$versionName" else "Dominotes"
+                setTitle("Actualización $label")
+                setDescription("Descargando archivo APK...")
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                setMimeType("application/vnd.android.package-archive")
+                setAllowedOverMetered(true)
+                setAllowedOverRoaming(true)
+            }
+            downloadManager.enqueue(request)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun openBrowser(url: String) {
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(intent)
-        } catch (e: Exception) {
-            // Ignored
+        } catch (_: Exception) {}
+    }
+
+    fun downloadUpdate(url: String, versionName: String = "") {
+        val effectiveUrl = if (url.endsWith(".apk", ignoreCase = true)) {
+            url
+        } else if (versionName.isNotBlank()) {
+            "https://github.com/adandavid98/Dominotes/releases/download/v$versionName/Dominotes.apk"
+        } else {
+            DEFAULT_DOWNLOAD_URL
         }
+
+        val enqueued = downloadWithDownloadManager(effectiveUrl, versionName)
+        if (enqueued) {
+            try {
+                Toast.makeText(
+                    context,
+                    "Iniciando descarga en segundo plano. Mira tus notificaciones para instalar al finalizar.",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (_: Exception) {}
+        } else {
+            openBrowser(effectiveUrl)
+        }
+    }
+
+    fun openDownloadUrl(url: String) {
+        downloadUpdate(url)
+    }
+
+    fun openReleasesPage(versionName: String = "") {
+        val targetUrl = if (versionName.isNotBlank()) {
+            "https://github.com/adandavid98/Dominotes/releases/tag/v$versionName"
+        } else {
+            "https://github.com/adandavid98/Dominotes/releases/latest"
+        }
+        openBrowser(targetUrl)
     }
 }

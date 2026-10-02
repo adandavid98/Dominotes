@@ -33,12 +33,14 @@ jobs:
       - name: Prepare Keystore & Environment
         run: |
           touch .env
-          if [ -f debug.keystore.base64 ]; then
+          if [ -n "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > debug.keystore
+          elif [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore
           fi
-          if [ ! -f debug.keystore ]; then
-            echo "Generando debug.keystore de respaldo..."
-            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          if [ ! -s debug.keystore ]; then
+            echo "Restoring persistent debug keystore from fixed template..."
+            echo "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" | base64 -d > debug.keystore
           fi
 
       - name: Accept Android SDK Licenses
@@ -92,6 +94,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION_NAME }}
+          make_latest: true
           name: "Versión ${{ env.VERSION_NAME }} (Build ${{ env.VERSION_CODE }})"
           body: |
             🚀 **Versión ${{ env.VERSION_NAME }} de Dominotes**
